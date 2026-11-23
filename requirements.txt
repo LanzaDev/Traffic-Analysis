@@ -1,0 +1,6 @@
+# Rastreamento e Análise de Tráfego — dependências
+# Python 3.10+ (testado em 3.15). Instalação: pip install -r requirements.txt
+ultralytics>=8.4.0      # YOLOv8 / YOLO11 + trackers (ByteTrack, BoT-SORT)
+opencv-python>=4.8.0    # captura de vídeo, desenho e transformação de perspectiva
+numpy>=1.26.0
+lapx>=0.5.5             # solver de atribuição linear (fornece o módulo `lap`) p/ ByteTrack

@@ -1,0 +1,1 @@
+{"enabled": true, "source_points": [[520, 430], [760, 430], [900, 660], [300, 660]], "real_width_m": 8.0, "real_height_m": 25.0, "pixels_per_meter": 15.0, "smoothing_alpha": 0.35, "max_speed_kmh": 200.0, "min_displacement_m": 0.05, "window_s": 0.5}

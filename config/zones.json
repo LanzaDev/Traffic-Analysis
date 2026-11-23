@@ -1,0 +1,1 @@
+{"zones": [{"name": "Area Principal", "type": "polygon", "points": [[0, 380], [1280, 380], [1280, 719], [0, 719]], "color": [0, 200, 255]}, {"name": "Linha de Contagem", "type": "line", "points": [[0, 560], [1280, 560]], "color": [0, 255, 128]}]}
