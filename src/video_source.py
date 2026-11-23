@@ -84,9 +84,10 @@ class VideoSource:
     def frames(self) -> Iterator[Tuple[int, float, "cv2.Mat"]]:
         """Gera (índice_absoluto, timestamp_s, frame) já aplicando frame skipping.
 
-        Para arquivos, todos os frames são lidos (necessário para avançar), mas
-        apenas 1 a cada `skip_frames` é entregue. Para streams ao vivo, os frames
-        ignorados são descartados via grab() para minimizar a latência.
+        Todos os frames são lidos com read() (necessário para avançar no arquivo
+        e para manter o stream ao vivo em dia); apenas 1 a cada `skip_frames` é
+        entregue. Usa-se read() em vez de grab()/retrieve() porque o backend
+        MSMF do Windows falha no grab() separado (erro OnReadSample).
         """
         if self.cap is None:
             self.open()
@@ -96,19 +97,11 @@ class VideoSource:
         start = time.perf_counter()
 
         while True:
-            if self.is_live:
-                # Descarta (skip-1) frames para manter o stream "em dia".
-                for _ in range(self.skip_frames - 1):
-                    if not self.cap.grab():
-                        break
-                ret, frame = self.cap.retrieve()
-                abs_idx += self.skip_frames
-            else:
-                ret, frame = self.cap.read()
-                abs_idx += 1
-                if (abs_idx - 1) % self.skip_frames != 0:
-                    continue
+            ret, frame = self.cap.read()
+            abs_idx += 1
 
+            # Trata falha de leitura antes do skipping, para que uma fonte morta
+            # acione a reconexão/encerramento mesmo em frames ignorados.
             if not ret or frame is None:
                 if self.is_live and reconnects < self.max_reconnects:
                     reconnects += 1
@@ -122,6 +115,10 @@ class VideoSource:
                     start = time.perf_counter()
                     continue
                 break
+
+            # Frame skipping: entrega apenas 1 a cada N frames lidos.
+            if (abs_idx - 1) % self.skip_frames != 0:
+                continue
 
             if self.is_live:
                 timestamp = time.perf_counter() - start
