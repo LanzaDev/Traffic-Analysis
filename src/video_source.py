@@ -53,7 +53,9 @@ class VideoSource:
 
     def open(self) -> "VideoSource":
         if self.kind == "webcam":
-            self.cap = cv2.VideoCapture(int(self.raw))
+            # DirectShow (CAP_DSHOW) é mais confiável que o padrão MSMF no Windows
+            # para captura de webcam (evita falhas de grab/OnReadSample).
+            self.cap = cv2.VideoCapture(int(self.raw), cv2.CAP_DSHOW)
         elif self.kind == "stream":
             self.cap = cv2.VideoCapture(self.raw, cv2.CAP_FFMPEG)
             # Buffer mínimo para reduzir latência em tempo real.
