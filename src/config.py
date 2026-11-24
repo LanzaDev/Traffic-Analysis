@@ -144,6 +144,8 @@ class AppConfig:
     show: bool = True
     max_frames: int = 0  # 0 = processar tudo
     run_name: str = ""
+    json_output: bool = False
+    report_format: str = "pretty"
 
 
 # --------------------------------------------------------------------------- #

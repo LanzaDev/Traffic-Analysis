@@ -125,6 +125,13 @@ class AnalysisRunner:
         report = self.analyzer.get_report(output_video_path=self._video_path)
         self._save_report(report)
         self._print_summary(report)
+
+        if cfg.json_output:
+            if cfg.report_format == "compact":
+                print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+            else:
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+
         return report
 
     # ------------------------------------------------------------------ #

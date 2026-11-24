@@ -57,6 +57,10 @@ def _common_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-frames", type=int, default=0,
                    help="Limita o nº de frames processados (0 = todos). Útil para testes.")
     p.add_argument("--run-name", default="", help="Nome base para os arquivos de saída.")
+    p.add_argument("--json", action="store_true",
+                   help="Imprime o relatório final em JSON no stdout (útil para encanear com outras ferramentas).")
+    p.add_argument("--report-format", choices=["pretty", "compact"], default="pretty",
+                   help="Formato da saída JSON no stdout (ignorado se --json não for usado).")
     return p
 
 
@@ -178,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
         show=not args.no_show,
         max_frames=args.max_frames,
         run_name=args.run_name,
+        json_output=args.json,
+        report_format=args.report_format,
     )
 
     try:
