@@ -36,7 +36,7 @@ traffic_analysis/
 │   ├── zones.json          # Zonas ROI (polígonos e linhas)
 │   └── speed.json          # Calibração de velocidade (perspectiva)
 ├── models/
-│   └── yolo_traffic.pt      # Modelo YOLO treinado para veículos
+│   └── yolo_traffic_classes.pt # Modelo YOLOv8 treinado para veículos com classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck)
 ├── assets/
 │   ├── traffic.mp4         # Vídeo de teste (copiado do yolo_project)
 │   └── preview.jpg         # Frame de referência
@@ -242,8 +242,10 @@ Em `output/` (com `--save-video` e/ou ao final de cada execução):
 
 ## 📝 Notas técnicas
 
-- **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto usa `yolo_traffic.pt`
-  (modelo treinado para veículos) herdado, mas aceita qualquer modelo, ex. `--model yolov8n.pt`.
+- **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto aceita qualquer modelo, ex. `--model yolov8n.pt`.
+  - `models/yolo11n.pt` — COCO original (detecta person, car, truck, bus, motorcycle, etc.). Útil para contagem de pessoas + veículos.
+  - `models/yolo_traffic.pt` — classe genérica `Vehicle` (detecta veículos sem distinguir tipo).
+  - `models/yolo_traffic_classes.pt` — **recomendado para tráfego**: YOLOv8 Nano treinado com 8 classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck). Não detecta pessoas.
 - **Classes COCO**: `person=0`, `car=2`, `motorcycle=3`, `bus=5`, `truck=7`.
   O alias `motorbike` do enunciado é mapeado para `motorcycle`.
 - **Desempenho**: em CPU, `--skip-frames 2..4` e `--imgsz 480` ajudam a manter
