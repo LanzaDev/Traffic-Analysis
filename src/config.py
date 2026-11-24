@@ -334,7 +334,7 @@ class AppConfig:
 
     source: str = "assets/traffic.mp4"
     mode: str = "full"
-    model_path: str = "models/yolo_traffic.pt"
+    model_path: str = "models/yolo11n.pt"
     conf: float = 0.25
     iou: float = 0.5
     imgsz: int = 640

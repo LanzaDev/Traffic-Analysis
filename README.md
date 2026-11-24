@@ -36,7 +36,9 @@ traffic_analysis/
 │   ├── zones.json          # Zonas ROI (polígonos e linhas)
 │   └── speed.json          # Calibração de velocidade (perspectiva)
 ├── models/
-│   └── yolo_traffic_classes.pt # Modelo YOLOv8 treinado para veículos com classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck)
+│   └── yolo11n.pt           # Modelo COCO original (padrão)
+│   └── yolo_traffic.pt      # Modelo com classe genérica Vehicle
+│   └── yolo_traffic_classes.pt # Modelo YOLOv8 com classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck)
 ├── assets/
 │   ├── traffic.mp4         # Vídeo de teste (copiado do yolo_project)
 │   └── preview.jpg         # Frame de referência
@@ -81,7 +83,7 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 
 > **Versionamento:** `venv/`, `output/` (vídeos/relatórios gerados) e vídeos de
 > entrada (`assets/*.mp4`) ficam fora do git (`.gitignore`). O modelo
-> `models/yolo_traffic.pt` está incluído. Coloque seu vídeo em `assets/traffic.mp4`
+> `models/yolo11n.pt` está incluído. Coloque seu vídeo em `assets/traffic.mp4`
 > ou use `--source` (veja `assets/README.md`).
 
 ---
@@ -126,7 +128,7 @@ venv\Scripts\python.exe main.py --mode full --no-show --max-frames 100
 |-------|--------|-----------|
 | `--source` | `assets/traffic.mp4` | Vídeo, URL RTSP/HTTP ou índice de webcam |
 | `--mode` | menu | `people` / `vehicles` / `speed` / `full` |
-| `--model` | `models/yolo_traffic.pt` | Modelo YOLO (aceita `yolov8n.pt`, `yolo11n.pt`, etc.) |
+| `--model` | `models/yolo11n.pt` | Modelo YOLO (aceita `yolov8n.pt`, `yolo_traffic.pt`, `yolo_traffic_classes.pt`) |
 | `--tracker` | `bytetrack` | `bytetrack` ou `botsort` |
 | `--skip-frames` | `1` | Processa 1 a cada N frames |
 | `--conf` / `--iou` | `0.25` / `0.5` | Limiares de detecção / NMS |
@@ -243,9 +245,9 @@ Em `output/` (com `--save-video` e/ou ao final de cada execução):
 ## 📝 Notas técnicas
 
 - **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto aceita qualquer modelo, ex. `--model yolov8n.pt`.
-  - `models/yolo11n.pt` — COCO original (detecta person, car, truck, bus, motorcycle, etc.). Útil para contagem de pessoas + veículos.
+  - `models/yolo11n.pt` — **padrão**. COCO original (detecta person, car, truck, bus, motorcycle, etc.). Melhor detecção geral e mais classes.
   - `models/yolo_traffic.pt` — classe genérica `Vehicle` (detecta veículos sem distinguir tipo).
-  - `models/yolo_traffic_classes.pt` — **recomendado para tráfego**: YOLOv8 Nano treinado com 8 classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck). Não detecta pessoas.
+  - `models/yolo_traffic_classes.pt` — YOLOv8 Nano treinado com 8 classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck). Não detecta pessoas e pode perder detecções em cenas complexas.
 - **Classes COCO**: `person=0`, `car=2`, `motorcycle=3`, `bus=5`, `truck=7`.
   O alias `motorbike` do enunciado é mapeado para `motorcycle`.
 - **Desempenho**: em CPU, `--skip-frames 2..4` e `--imgsz 480` ajudam a manter
