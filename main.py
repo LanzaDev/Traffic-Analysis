@@ -1,19 +1,21 @@
 """Ponto de entrada: Rastreamento e Análise de Tráfego.
 
-Oferece seleção de funcionalidade por argumentos CLI (argparse) ou por menu
-interativo no terminal (quando --mode não é informado).
+Oferece seleção de funcionalidade por subcomandos CLI (argparse) ou por menu
+interativo no terminal (quando nenhum subcomando é informado).
 
-Modos:
-    1. people   - Contagem de Pessoas (classe 'person')
-    2. vehicles - Contagem de Veículos (car, truck, bus, motorcycle/motorbike)
-    3. speed    - Estimação de Velocidade de Veículos (km/h)
-    4. full     - Execução Completa (contagem + velocidade simultaneamente)
+Subcomandos:
+    people   - Contagem de Pessoas (classe 'person')
+    vehicles - Contagem de Veículos (car, truck, bus, motorcycle/motorbike)
+    speed    - Estimação de Velocidade de Veículos (km/h)
+    full     - Execução Completa (contagem + velocidade simultaneamente)
 
 Exemplos:
-    python main.py --mode full --source assets/traffic.mp4 --save-video
-    python main.py --mode vehicles --source 0 --skip-frames 2
-    python main.py --mode speed --source "rtsp://user:pass@192.168.1.10:554/stream"
-    python main.py            # abre o menu interativo
+    python main.py people   --source assets/traffic.mp4
+    python main.py vehicles --source assets/traffic.mp4 --save-video
+    python main.py speed    --source assets/traffic.mp4 --speed-config config/speed.json
+    python main.py full     --source assets/traffic.mp4 --skip-frames 2 --save-video
+    python main.py                          # abre o menu interativo
+    python main.py vehicles --help          # ajuda específica do modo
 """
 
 from __future__ import annotations
@@ -32,15 +34,11 @@ logging.basicConfig(
 )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="Rastreamento e Análise de Tráfego (YOLO + ByteTrack).",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
+def _common_parser() -> argparse.ArgumentParser:
+    """Parser com argumentos compartilhados por todos os modos."""
+    p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--source", default="assets/traffic.mp4",
                    help="Caminho de vídeo (.mp4/.avi), URL RTSP/HTTP ou índice de webcam (0,1,...).")
-    p.add_argument("--mode", choices=MODES, default=None,
-                   help="Funcionalidade. Se omitido, abre o menu interativo.")
     p.add_argument("--model", default="models/yolo11n.pt",
                    help="Modelo YOLO (Ultralytics). Compatível com yolov8n.pt/yolo11n.pt.")
     p.add_argument("--conf", type=float, default=0.25, help="Confiança mínima de detecção.")
@@ -53,14 +51,64 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Processa 1 a cada N frames (desempenho em tempo real/CCTV).")
     p.add_argument("--zones", default="config/zones.json",
                    help="JSON de zonas ROI (polígonos/linhas).")
-    p.add_argument("--speed-config", default="config/speed.json",
-                   help="JSON de calibração de velocidade (perspectiva).")
     p.add_argument("--output", default="output", help="Diretório de saída (vídeo/relatórios).")
     p.add_argument("--save-video", action="store_true", help="Grava o vídeo anotado em output/.")
     p.add_argument("--no-show", action="store_true", help="Não exibe janela (modo headless).")
     p.add_argument("--max-frames", type=int, default=0,
                    help="Limita o nº de frames processados (0 = todos). Útil para testes.")
     p.add_argument("--run-name", default="", help="Nome base para os arquivos de saída.")
+    return p
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Rastreamento e Análise de Tráfego (YOLO + ByteTrack).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    sub = p.add_subparsers(dest="command", help="Funcionalidade a executar.")
+
+    common = _common_parser()
+
+    # people — contagem de pessoas, sem calibração de velocidade.
+    sp_people = sub.add_parser(
+        "people", parents=[common], help="Contagem de Pessoas (classe person)."
+    )
+    sp_people.set_defaults(mode="people")
+
+    # vehicles — contagem de veículos, sem calibração de velocidade.
+    sp_vehicles = sub.add_parser(
+        "vehicles",
+        parents=[common],
+        help="Contagem de Veículos (car, truck, bus, motorcycle/motorbike).",
+    )
+    sp_vehicles.set_defaults(mode="vehicles")
+
+    # speed — estimação de velocidade, requer calibração.
+    sp_speed = sub.add_parser(
+        "speed",
+        parents=[common],
+        help="Estimação de Velocidade de Veículos (km/h).",
+    )
+    sp_speed.add_argument(
+        "--speed-config",
+        default="config/speed.json",
+        help="JSON de calibração de velocidade (perspectiva).",
+    )
+    sp_speed.set_defaults(mode="speed")
+
+    # full — contagem + velocidade simultaneamente.
+    sp_full = sub.add_parser(
+        "full",
+        parents=[common],
+        help="Execução Completa (contagem + velocidade).",
+    )
+    sp_full.add_argument(
+        "--speed-config",
+        default="config/speed.json",
+        help="JSON de calibração de velocidade (perspectiva).",
+    )
+    sp_full.set_defaults(mode="full")
+
     return p
 
 
@@ -98,24 +146,35 @@ def interactive_menu() -> dict:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    overrides = {}
-    if args.mode is None:
+    # Nenhum subcomando informado -> menu interativo.
+    if getattr(args, "command", None) is None:
         overrides = interactive_menu()
+        mode = overrides["mode"]
+        source = overrides["source"]
+        skip_frames = overrides["skip_frames"]
+        save_video = overrides["save_video"]
+        speed_config = args.speed_config if hasattr(args, "speed_config") else "config/speed.json"
+    else:
+        mode = args.mode
+        source = args.source
+        skip_frames = args.skip_frames
+        save_video = args.save_video
+        speed_config = getattr(args, "speed_config", "config/speed.json")
 
     cfg = AppConfig(
-        source=overrides.get("source", args.source),
-        mode=overrides.get("mode", args.mode or "full"),
+        source=source,
+        mode=mode,
         model_path=args.model,
         conf=args.conf,
         iou=args.iou,
         imgsz=args.imgsz,
         device=args.device,
         tracker=args.tracker,
-        skip_frames=overrides.get("skip_frames", args.skip_frames),
+        skip_frames=skip_frames,
         zones_file=args.zones,
-        speed_file=args.speed_config,
+        speed_file=speed_config,
         output_dir=args.output,
-        save_video=overrides.get("save_video", args.save_video),
+        save_video=save_video,
         show=not args.no_show,
         max_frames=args.max_frames,
         run_name=args.run_name,
