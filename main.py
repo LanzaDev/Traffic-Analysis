@@ -19,10 +19,17 @@ Exemplos:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from src.config import AppConfig, MODES, MODE_LABELS
-from src.pipeline import TrafficAnalyzer
+from src.runner import AnalysisRunner
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        TrafficAnalyzer(cfg).run()
+        AnalysisRunner(cfg).run()
     except FileNotFoundError as e:
         print(f"[erro] {e}", file=sys.stderr)
         return 2
