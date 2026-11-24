@@ -9,12 +9,15 @@ Recursos:
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Iterator, Optional, Tuple
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class VideoSource:
@@ -108,9 +111,11 @@ class VideoSource:
             if not ret or frame is None:
                 if self.is_live and reconnects < self.max_reconnects:
                     reconnects += 1
-                    print(
-                        f"[fonte] falha na leitura; reconectando "
-                        f"({reconnects}/{self.max_reconnects})..."
+                    logger.warning(
+                        "[fonte] falha na leitura; reconectando "
+                        "(%d/%d)...",
+                        reconnects,
+                        self.max_reconnects,
                     )
                     time.sleep(self.reconnect_delay)
                     assert self.cap is not None
