@@ -62,6 +62,7 @@ class TrafficAnalyzer:
         self.source = VideoSource(cfg.source, skip_frames=cfg.skip_frames)
 
         self.output_dir = resolve_path(cfg.output_dir)
+        assert self.output_dir is not None
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------ #
@@ -196,6 +197,7 @@ class TrafficAnalyzer:
         }
 
     def _save_report(self, report: dict) -> None:
+        assert self.output_dir is not None
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         name = self.cfg.run_name or self.cfg.mode
         json_path = self.output_dir / f"{name}_{stamp}_report.json"

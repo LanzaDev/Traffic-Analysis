@@ -75,7 +75,8 @@ class Detector:
             classes=self.classes,
             verbose=False,
         )
-        return self._parse(results[0])
+        results_list = list(results)
+        return self._parse(results_list[0])
 
     def _parse(self, result) -> list[Detection]:
         detections: list[Detection] = []

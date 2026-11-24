@@ -35,15 +35,16 @@ class SpeedEstimator:
         self.ppm: float = cfg.pixels_per_meter
 
         if self.enabled:
-            src = np.float32(cfg.source_points)
+            src = np.asarray(cfg.source_points, dtype=np.float32)
             w = cfg.real_width_m * self.ppm
             h = cfg.real_height_m * self.ppm
-            dst = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
+            dst = np.asarray([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
             self.M = cv2.getPerspectiveTransform(src, dst)
 
     def to_world(self, pt: tuple[float, float]) -> tuple[float, float]:
         """Projeta um ponto da imagem para coordenadas métricas (metros)."""
-        p = np.float32([[[pt[0], pt[1]]]])
+        assert self.M is not None, "Matriz de perspectiva não inicializada"
+        p = np.asarray([[[pt[0], pt[1]]]], dtype=np.float32)
         t = cv2.perspectiveTransform(p, self.M)[0][0]
         return float(t[0]) / self.ppm, float(t[1]) / self.ppm
 

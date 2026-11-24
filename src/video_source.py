@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterator, Optional, Tuple
 
 import cv2
+import numpy as np
 
 
 class VideoSource:
@@ -81,7 +82,7 @@ class VideoSource:
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         return self
 
-    def frames(self) -> Iterator[Tuple[int, float, "cv2.Mat"]]:
+    def frames(self) -> Iterator[Tuple[int, float, np.ndarray]]:
         """Gera (índice_absoluto, timestamp_s, frame) já aplicando frame skipping.
 
         Todos os frames são lidos com read() (necessário para avançar no arquivo
@@ -91,6 +92,8 @@ class VideoSource:
         """
         if self.cap is None:
             self.open()
+
+        assert self.cap is not None, "VideoCapture não foi inicializado"
 
         abs_idx = 0
         reconnects = 0
@@ -110,6 +113,7 @@ class VideoSource:
                         f"({reconnects}/{self.max_reconnects})..."
                     )
                     time.sleep(self.reconnect_delay)
+                    assert self.cap is not None
                     self.cap.release()
                     self.open()
                     start = time.perf_counter()

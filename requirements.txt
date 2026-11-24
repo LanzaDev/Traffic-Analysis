@@ -5,3 +5,4 @@ opencv-python>=4.8.0    # captura de vídeo, desenho e transformação de perspe
 numpy>=1.26.0
 lapx>=0.5.5             # solver de atribuição linear (fornece o módulo `lap`) p/ ByteTrack
 pytest>=8.0.0           # testes unitários
+mypy>=1.11.0            # verificação estática de tipos
