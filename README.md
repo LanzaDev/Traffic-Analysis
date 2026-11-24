@@ -143,6 +143,33 @@ Na janela de vídeo: **`q`** ou **ESC** encerra.
 
 ---
 
+## 🐳 Docker
+
+O projeto inclui `Dockerfile` e `docker-compose.yml` para execução isolada.
+
+### Build da imagem
+```bat
+docker build -t traffic-analysis .
+```
+
+### Execução com docker-compose
+Coloque seus vídeos em `./videos` e execute:
+
+```bat
+docker-compose up --build vehicles --source /videos/traffic.mp4 --save-video
+docker-compose run --rm traffic_analysis people --source /videos/camera1.mp4
+docker-compose run --rm traffic_analysis speed --source /videos/traffic.mp4 --speed-config /config/speed.json
+```
+
+Os relatórios e vídeos anotados ficam em `./output`.
+
+### GPU (NVIDIA)
+Descomente a seção `deploy` no `docker-compose.yml` e instale o
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+para usar GPU dentro do container (`TRAFFIC_DEVICE=0`).
+
+---
+
 ## 🗺️ Zonas de Interesse (ROI)
 
 `config/zones.json` aceita **polígonos** (presença na área) e **linhas**

@@ -1,0 +1,41 @@
+# docker-compose.yml — Rastreamento e Análise de Tráfego
+#
+# Exemplos de uso:
+#   docker-compose up --build vehicles --source /videos/traffic.mp4 --save-video
+#   docker-compose run --rm traffic_analysis people --source /videos/camera1.mp4
+#   docker-compose run --rm traffic_analysis speed --source /videos/traffic.mp4 --speed-config /config/speed.json
+#
+# Volumes:
+#   - ./videos:/videos      coloque seus vídeos aqui
+#   - ./output:/app/output  relatórios e vídeos anotados saem aqui
+#   - ./config:/config      arquivos zones.json / speed.json (opcional)
+#
+# GPU (NVIDIA): descomente a seção deploy e instale o NVIDIA Container Toolkit.
+
+services:
+  traffic_analysis:
+    build: .
+    image: traffic-analysis:latest
+    container_name: traffic-analysis
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./videos:/videos:ro
+      - ./output:/app/output
+      - ./config:/config:ro
+      - ./models:/app/models:ro
+    environment:
+      - TRAFFIC_DEFAULT_SOURCE=/videos/traffic.mp4
+      - TRAFFIC_OUTPUT_DIR=/app/output
+      - TRAFFIC_NO_SHOW=true
+      - TRAFFIC_DEVICE=cpu
+    # Descomente para usar GPU NVIDIA (requer nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    # environment:
+    #   - TRAFFIC_DEVICE=0
