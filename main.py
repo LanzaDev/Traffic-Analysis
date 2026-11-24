@@ -76,6 +76,10 @@ def _common_parser() -> argparse.ArgumentParser:
                    help="Salto máximo no modo adaptativo (padrão 10).")
     p.add_argument("--batch-size", type=int, default=None,
                    help="Tamanho do lote para inferência em batch (padrão 1 = sem batch).")
+    p.add_argument("--min-detection-frames", type=int, default=None,
+                   help="Mínimo de frames consecutivos para exibir velocidade (padrão 3).")
+    p.add_argument("--min-confidence", type=float, default=None,
+                   help="Confiança média mínima para exibir velocidade (padrão 0.3).")
     p.add_argument("--export", default=None, choices=["onnx", "engine", "openvino", "ncnn"],
                    help="Exporta o modelo para o formato especificado e sai.")
     p.add_argument("--engine", default=None,
@@ -227,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=args.batch_size if args.batch_size is not None else env_overrides.get("batch_size", 1),
         export_format=args.export if args.export is not None else env_overrides.get("export_format"),
         engine_path=args.engine if args.engine is not None else env_overrides.get("engine_path"),
+        min_detection_frames=args.min_detection_frames if args.min_detection_frames is not None else env_overrides.get("min_detection_frames", 3),
+        min_confidence=args.min_confidence if args.min_confidence is not None else env_overrides.get("min_confidence", 0.3),
     )
 
     # Se solicitado, exporta o modelo para o formato desejado e encerra.

@@ -161,6 +161,8 @@ def load_env_config() -> dict:
         "TRAFFIC_ENGINE_PATH",
         "TRAFFIC_KALMAN_PROCESS_NOISE",
         "TRAFFIC_KALMAN_MEASUREMENT_NOISE",
+        "TRAFFIC_MIN_DETECTION_FRAMES",
+        "TRAFFIC_MIN_CONFIDENCE",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -236,6 +238,14 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["kalman_measurement_noise"] = _parse_float(
             env["TRAFFIC_KALMAN_MEASUREMENT_NOISE"], 10.0
         )
+    if "TRAFFIC_MIN_DETECTION_FRAMES" in env:
+        overrides["min_detection_frames"] = _parse_int(
+            env["TRAFFIC_MIN_DETECTION_FRAMES"], 3
+        )
+    if "TRAFFIC_MIN_CONFIDENCE" in env:
+        overrides["min_confidence"] = _parse_float(
+            env["TRAFFIC_MIN_CONFIDENCE"], 0.3
+        )
 
     return overrides
 
@@ -284,6 +294,8 @@ class SpeedConfig:
     window_s: float = 0.5  # janela temporal para cálculo do deslocamento
     kalman_process_noise: float = 1.0  # ruído do processo do filtro de Kalman (Q)
     kalman_measurement_noise: float = 10.0  # ruído da medição do filtro de Kalman (R)
+    min_detection_frames: int = 3  # mínimo de frames consecutivos para calcular velocidade
+    min_confidence: float = 0.3  # confiança média mínima para exibir velocidade
 
 
 @dataclass
@@ -315,6 +327,8 @@ class AppConfig:
     batch_size: int = 1
     export_format: Optional[str] = None  # onnx, engine, openvino, ncnn
     engine_path: Optional[str] = None  # caminho para modelo TensorRT já exportado
+    min_detection_frames: int = 3  # mínimo de frames consecutivos para exibir velocidade
+    min_confidence: float = 0.3  # confiança média mínima para exibir velocidade
 
 
 # --------------------------------------------------------------------------- #

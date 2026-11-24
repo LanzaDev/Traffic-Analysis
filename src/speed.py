@@ -97,6 +97,9 @@ class SpeedEstimator:
         self.M: Optional[np.ndarray] = None
         self.ppm: float = cfg.pixels_per_meter
         self.filters: dict[int, KalmanSpeedFilter] = {}
+        # Contagem de frames consecutivos e soma de confiança por ID.
+        self._consecutive_frames: dict[int, int] = {}
+        self._confidence_sum: dict[int, float] = {}
 
         if self.enabled:
             src = np.asarray(cfg.source_points, dtype=np.float32)
@@ -115,6 +118,22 @@ class SpeedEstimator:
             ),
         )
 
+    def is_confirmed(self, tid: Optional[int]) -> bool:
+        """Retorna True se o ID tem confiança suficiente para exibir velocidade.
+
+        Critério: pelo menos min_detection_frames frames consecutivos E
+        confiança média >= min_confidence.
+        """
+        if tid is None:
+            return False
+        frames = self._consecutive_frames.get(tid, 0)
+        if frames < self.cfg.min_detection_frames:
+            return False
+        total_conf = self._confidence_sum.get(tid, 0.0)
+        if frames > 0 and (total_conf / frames) < self.cfg.min_confidence:
+            return False
+        return True
+
     def to_world(self, pt: tuple[float, float]) -> tuple[float, float]:
         """Projeta um ponto da imagem para coordenadas métricas (metros)."""
         assert self.M is not None, "Matriz de perspectiva não inicializada"
@@ -125,15 +144,30 @@ class SpeedEstimator:
     def update(self, detections: list[Detection], timestamp: float) -> None:
         if not self.enabled:
             return
+        detected_tids: set[int] = set()
         for d in detections:
             if not d.is_vehicle or d.track_id is None:
                 continue
             tid = d.track_id
+            detected_tids.add(tid)
             wx, wy = self.to_world(d.bottom_center)
             dq = self.history.setdefault(tid, deque(maxlen=20))
             dq.append((timestamp, wx, wy))
             self.last_seen[tid] = timestamp
+
+            # Atualiza contagem de frames consecutivos e soma de confiança.
+            self._consecutive_frames[tid] = self._consecutive_frames.get(tid, 0) + 1
+            self._confidence_sum[tid] = (
+                self._confidence_sum.get(tid, 0.0) + float(d.confidence)
+            )
+
             self._compute(tid, dq)
+
+        # Reseta contagem de frames consecutivos para IDs que não foram detectados neste frame.
+        for tid in list(self._consecutive_frames.keys()):
+            if tid not in detected_tids:
+                self._consecutive_frames[tid] = 0
+
         self._cleanup(timestamp)
 
     def _compute(self, tid: int, dq: deque) -> None:
@@ -169,9 +203,13 @@ class SpeedEstimator:
             self.speeds.pop(tid, None)
             self.last_seen.pop(tid, None)
             self.filters.pop(tid, None)
+            self._consecutive_frames.pop(tid, None)
+            self._confidence_sum.pop(tid, None)
 
     def get(self, tid: Optional[int]) -> Optional[float]:
         if tid is None:
+            return None
+        if not self.is_confirmed(tid):
             return None
         return self.speeds.get(tid)
 

@@ -80,6 +80,9 @@ class TrafficAnalyzer:
         speed_cfg = load_speed(cfg.speed_file)
         if not mode_uses_speed(cfg.mode):
             speed_cfg.enabled = False
+        # Sobrescreve parâmetros de confiança vindos do AppConfig (CLI/env).
+        speed_cfg.min_detection_frames = cfg.min_detection_frames
+        speed_cfg.min_confidence = cfg.min_confidence
         self.speed = SpeedEstimator(speed_cfg)
 
         self.visualizer = Visualizer(show_speed=self.speed.enabled)
