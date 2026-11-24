@@ -66,6 +66,14 @@ def _common_parser() -> argparse.ArgumentParser:
                    help="Imprime o relatório final em JSON no stdout (útil para encanear com outras ferramentas).")
     p.add_argument("--report-format", default=None, choices=["pretty", "compact"],
                    help="Formato da saída JSON no stdout (ignorado se --json não for usado).")
+    p.add_argument("--adaptive-skip", action="store_true",
+                   help="Ajusta automaticamente o salto de frames para manter o FPS alvo.")
+    p.add_argument("--target-fps", type=float, default=None,
+                   help="FPS alvo para o skip adaptativo (padrão 15.0).")
+    p.add_argument("--min-skip", type=int, default=None,
+                   help="Salto mínimo no modo adaptativo (padrão 1).")
+    p.add_argument("--max-skip", type=int, default=None,
+                   help="Salto máximo no modo adaptativo (padrão 10).")
     return p
 
 
@@ -206,6 +214,10 @@ def main(argv: list[str] | None = None) -> int:
         run_name=args.run_name if args.run_name is not None else env_overrides.get("run_name", ""),
         json_output=args.json or env_overrides.get("json_output", False),
         report_format=args.report_format if args.report_format is not None else env_overrides.get("report_format", "pretty"),
+        adaptive_skip=args.adaptive_skip or env_overrides.get("adaptive_skip", False),
+        target_fps=args.target_fps if args.target_fps is not None else env_overrides.get("target_fps", 15.0),
+        min_skip=args.min_skip if args.min_skip is not None else env_overrides.get("min_skip", 1),
+        max_skip=args.max_skip if args.max_skip is not None else env_overrides.get("max_skip", 10),
     )
 
     try:

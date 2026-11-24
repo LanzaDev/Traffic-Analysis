@@ -62,6 +62,13 @@ class AnalysisRunner:
             cfg.skip_frames,
             self.analyzer.detector.device,
         )
+        if cfg.adaptive_skip:
+            logger.info(
+                "  Skip adaptativo: sim | alvo: %.1f FPS | min: %d | max: %d",
+                cfg.target_fps,
+                cfg.min_skip,
+                cfg.max_skip,
+            )
         logger.info(
             "  Zonas ROI: %d | Velocidade: %s",
             len(self.analyzer.zones),
@@ -75,6 +82,13 @@ class AnalysisRunner:
         window = "Analise de Trafego"
         wall_start = time.perf_counter()
         last_log = wall_start
+        last_adapt = wall_start
+
+        # Skip adaptativo: começa com o skip configurado e ajusta conforme o FPS real.
+        current_skip = cfg.skip_frames
+        self.source.skip_frames = current_skip
+        self.source.min_skip = cfg.min_skip
+        self.source.max_skip = cfg.max_skip
 
         try:
             for abs_idx, timestamp, frame in self.source.frames():
@@ -107,6 +121,28 @@ class AnalysisRunner:
                 if now - last_log >= 3.0:
                     self._log(proc_fps)
                     last_log = now
+
+                # Ajuste adaptativo de skip a cada ~10 frames processados.
+                if cfg.adaptive_skip and now - last_adapt >= 1.0:
+                    frames_done = self.analyzer.stats.frames_processed
+                    if frames_done >= 10:
+                        if proc_fps < cfg.target_fps * 0.8:
+                            new_skip = current_skip + 1
+                        elif proc_fps > cfg.target_fps * 1.2:
+                            new_skip = current_skip - 1
+                        else:
+                            new_skip = current_skip
+
+                        if new_skip != current_skip:
+                            current_skip = new_skip
+                            self.source.skip_frames = current_skip
+                            logger.info(
+                                "[runner] skip adaptativo: %d (FPS %.1f, alvo %.1f)",
+                                current_skip,
+                                proc_fps,
+                                cfg.target_fps,
+                            )
+                        last_adapt = now
 
                 if cfg.max_frames and self.analyzer.stats.frames_processed >= cfg.max_frames:
                     logger.info(

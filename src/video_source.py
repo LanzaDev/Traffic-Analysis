@@ -27,11 +27,15 @@ class VideoSource:
         self,
         source: str,
         skip_frames: int = 1,
+        min_skip: int = 1,
+        max_skip: int = 10,
         max_reconnects: int = 5,
         reconnect_delay: float = 2.0,
     ) -> None:
         self.raw = str(source)
-        self.skip_frames = max(1, int(skip_frames))
+        self._skip_frames = max(1, int(skip_frames))
+        self.min_skip = max(1, int(min_skip))
+        self.max_skip = max(self.min_skip, int(max_skip))
         self.max_reconnects = max_reconnects
         self.reconnect_delay = reconnect_delay
 
@@ -42,6 +46,19 @@ class VideoSource:
         self.height: int = 0
         self.frame_count: int = 0
 
+    @property
+    def skip_frames(self) -> int:
+        """Quantos frames pular entre cada entrega (mutável para skip adaptativo)."""
+        return self._skip_frames
+
+    @skip_frames.setter
+    def skip_frames(self, value: int) -> None:
+        self._skip_frames = max(self.min_skip, min(self.max_skip, int(value)))
+
+    @property
+    def is_live(self) -> bool:
+        return self.kind in ("webcam", "stream")
+
     @staticmethod
     def _classify(source: str) -> str:
         if source.isdigit():
@@ -50,10 +67,6 @@ class VideoSource:
         if low.startswith(("rtsp://", "rtmp://", "http://", "https://")):
             return "stream"
         return "file"
-
-    @property
-    def is_live(self) -> bool:
-        return self.kind in ("webcam", "stream")
 
     def open(self) -> "VideoSource":
         if self.kind == "webcam":

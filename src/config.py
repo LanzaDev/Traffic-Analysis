@@ -152,6 +152,10 @@ def load_env_config() -> dict:
         "TRAFFIC_RUN_NAME",
         "TRAFFIC_JSON_OUTPUT",
         "TRAFFIC_REPORT_FORMAT",
+        "TRAFFIC_ADAPTIVE_SKIP",
+        "TRAFFIC_TARGET_FPS",
+        "TRAFFIC_MIN_SKIP",
+        "TRAFFIC_MAX_SKIP",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -205,6 +209,14 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["json_output"] = _parse_bool(env["TRAFFIC_JSON_OUTPUT"], False)
     if "TRAFFIC_REPORT_FORMAT" in env:
         overrides["report_format"] = env["TRAFFIC_REPORT_FORMAT"]
+    if "TRAFFIC_ADAPTIVE_SKIP" in env:
+        overrides["adaptive_skip"] = _parse_bool(env["TRAFFIC_ADAPTIVE_SKIP"], False)
+    if "TRAFFIC_TARGET_FPS" in env:
+        overrides["target_fps"] = _parse_float(env["TRAFFIC_TARGET_FPS"], 15.0)
+    if "TRAFFIC_MIN_SKIP" in env:
+        overrides["min_skip"] = _parse_int(env["TRAFFIC_MIN_SKIP"], 1)
+    if "TRAFFIC_MAX_SKIP" in env:
+        overrides["max_skip"] = _parse_int(env["TRAFFIC_MAX_SKIP"], 10)
 
     return overrides
 
@@ -275,6 +287,10 @@ class AppConfig:
     run_name: str = ""
     json_output: bool = False
     report_format: str = "pretty"
+    adaptive_skip: bool = False
+    target_fps: float = 15.0
+    min_skip: int = 1
+    max_skip: int = 10
 
 
 # --------------------------------------------------------------------------- #
