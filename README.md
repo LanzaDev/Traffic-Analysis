@@ -4,10 +4,9 @@ Projeto modular de **Visão Computacional** para contagem de pessoas/veículos e
 estimação de velocidade (km/h) a partir de **vídeos locais** ou **streams de
 câmeras CCTV (IP/RTSP)**.
 
-Construído sobre a base do `yolo_project` existente (mesmo modelo `yolo11n.pt` e
-o vídeo `traffic.mp4`), evoluindo de scripts simples de detecção para uma
-arquitetura completa de **detecção + rastreamento + zonas ROI + contagem +
-velocidade**.
+Construído sobre a base do `yolo_project` existente (o vídeo `traffic.mp4`),
+evoluindo de scripts simples de detecção para uma arquitetura completa de
+**detecção + rastreamento + zonas ROI + contagem + velocidade**.
 
 ---
 
@@ -37,7 +36,7 @@ traffic_analysis/
 │   ├── zones.json          # Zonas ROI (polígonos e linhas)
 │   └── speed.json          # Calibração de velocidade (perspectiva)
 ├── models/
-│   └── yolo11n.pt          # Modelo COCO (copiado do yolo_project)
+│   └── yolo_traffic.pt      # Modelo YOLO treinado para veículos
 ├── assets/
 │   ├── traffic.mp4         # Vídeo de teste (copiado do yolo_project)
 │   └── preview.jpg         # Frame de referência
@@ -82,7 +81,7 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 
 > **Versionamento:** `venv/`, `output/` (vídeos/relatórios gerados) e vídeos de
 > entrada (`assets/*.mp4`) ficam fora do git (`.gitignore`). O modelo
-> `models/yolo11n.pt` está incluído. Coloque seu vídeo em `assets/traffic.mp4`
+> `models/yolo_traffic.pt` está incluído. Coloque seu vídeo em `assets/traffic.mp4`
 > ou use `--source` (veja `assets/README.md`).
 
 ---
@@ -127,7 +126,7 @@ venv\Scripts\python.exe main.py --mode full --no-show --max-frames 100
 |-------|--------|-----------|
 | `--source` | `assets/traffic.mp4` | Vídeo, URL RTSP/HTTP ou índice de webcam |
 | `--mode` | menu | `people` / `vehicles` / `speed` / `full` |
-| `--model` | `models/yolo11n.pt` | Modelo YOLO (aceita `yolov8n.pt`) |
+| `--model` | `models/yolo_traffic.pt` | Modelo YOLO (aceita `yolov8n.pt`, `yolo11n.pt`, etc.) |
 | `--tracker` | `bytetrack` | `bytetrack` ou `botsort` |
 | `--skip-frames` | `1` | Processa 1 a cada N frames |
 | `--conf` / `--iou` | `0.25` / `0.5` | Limiares de detecção / NMS |
@@ -243,8 +242,8 @@ Em `output/` (com `--save-video` e/ou ao final de cada execução):
 
 ## 📝 Notas técnicas
 
-- **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto usa `yolo11n.pt`
-  (COCO) herdado do `yolo_project`, mas aceita qualquer modelo, ex. `--model yolov8n.pt`.
+- **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto usa `yolo_traffic.pt`
+  (modelo treinado para veículos) herdado, mas aceita qualquer modelo, ex. `--model yolov8n.pt`.
 - **Classes COCO**: `person=0`, `car=2`, `motorcycle=3`, `bus=5`, `truck=7`.
   O alias `motorbike` do enunciado é mapeado para `motorcycle`.
 - **Desempenho**: em CPU, `--skip-frames 2..4` e `--imgsz 480` ajudam a manter

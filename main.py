@@ -45,7 +45,7 @@ def _common_parser() -> argparse.ArgumentParser:
     p.add_argument("--source", default=None,
                    help="Caminho de vídeo (.mp4/.avi), URL RTSP/HTTP ou índice de webcam (0,1,...).")
     p.add_argument("--model", default=None,
-                   help="Modelo YOLO (Ultralytics). Compatível com yolov8n.pt/yolo11n.pt.")
+                   help="Modelo YOLO (Ultralytics). Compatível com yolo11n.pt, yolo_traffic.pt, etc.")
     p.add_argument("--conf", type=float, default=None, help="Confiança mínima de detecção.")
     p.add_argument("--iou", type=float, default=None, help="Limiar de IoU para NMS.")
     p.add_argument("--imgsz", type=int, default=None, help="Tamanho de inferência (pixels).")
@@ -190,8 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         skip_frames = overrides["skip_frames"]
         save_video = overrides["save_video"]
         speed_config = (
-            args.speed_config
-            if hasattr(args, "speed_config") and args.speed_config is not None
+            getattr(args, "speed_config", None)
+            if getattr(args, "speed_config", None) is not None
             else env_overrides.get("speed_file", "config/speed.json")
         )
     else:
@@ -204,8 +204,8 @@ def main(argv: list[str] | None = None) -> int:
         # Para flags booleanas, só aplicamos se o usuário passou explicitamente (True).
         save_video = args.save_video or env_overrides.get("save_video", False)
         speed_config = (
-            args.speed_config
-            if hasattr(args, "speed_config") and args.speed_config is not None
+            getattr(args, "speed_config", None)
+            if getattr(args, "speed_config", None) is not None
             else env_overrides.get("speed_file", "config/speed.json")
         )
 
@@ -227,31 +227,69 @@ def main(argv: list[str] | None = None) -> int:
     cfg = AppConfig(
         source=source,
         mode=mode,
-        model_path=args.model if args.model is not None else env_overrides.get("model_path", "models/yolo11n.pt"),
-        conf=args.conf if args.conf is not None else env_overrides.get("conf", 0.25),
-        iou=args.iou if args.iou is not None else env_overrides.get("iou", 0.5),
-        imgsz=args.imgsz if args.imgsz is not None else env_overrides.get("imgsz", 640),
-        device=args.device if args.device is not None else env_overrides.get("device", "cpu"),
-        tracker=args.tracker if args.tracker is not None else env_overrides.get("tracker", "bytetrack"),
+        model_path=getattr(args, "model", None)
+        if getattr(args, "model", None) is not None
+        else env_overrides.get("model_path", "models/yolo11n.pt"),
+        conf=getattr(args, "conf", None)
+        if getattr(args, "conf", None) is not None
+        else env_overrides.get("conf", 0.25),
+        iou=getattr(args, "iou", None)
+        if getattr(args, "iou", None) is not None
+        else env_overrides.get("iou", 0.5),
+        imgsz=getattr(args, "imgsz", None)
+        if getattr(args, "imgsz", None) is not None
+        else env_overrides.get("imgsz", 640),
+        device=getattr(args, "device", None)
+        if getattr(args, "device", None) is not None
+        else env_overrides.get("device", "cpu"),
+        tracker=getattr(args, "tracker", None)
+        if getattr(args, "tracker", None) is not None
+        else env_overrides.get("tracker", "bytetrack"),
         skip_frames=skip_frames,
-        zones_file=args.zones if args.zones is not None else env_overrides.get("zones_file", "config/zones.json"),
+        zones_file=getattr(args, "zones", None)
+        if getattr(args, "zones", None) is not None
+        else env_overrides.get("zones_file", "config/zones.json"),
         speed_file=speed_config,
-        output_dir=args.output if args.output is not None else env_overrides.get("output_dir", "output"),
+        output_dir=getattr(args, "output", None)
+        if getattr(args, "output", None) is not None
+        else env_overrides.get("output_dir", "output"),
         save_video=save_video,
         show=show,
-        max_frames=args.max_frames if args.max_frames is not None else env_overrides.get("max_frames", 0),
-        run_name=args.run_name if args.run_name is not None else env_overrides.get("run_name", ""),
-        json_output=args.json or env_overrides.get("json_output", False),
-        report_format=args.report_format if args.report_format is not None else env_overrides.get("report_format", "pretty"),
-        adaptive_skip=args.adaptive_skip or env_overrides.get("adaptive_skip", False),
-        target_fps=args.target_fps if args.target_fps is not None else env_overrides.get("target_fps", 15.0),
-        min_skip=args.min_skip if args.min_skip is not None else env_overrides.get("min_skip", 1),
-        max_skip=args.max_skip if args.max_skip is not None else env_overrides.get("max_skip", 10),
-        batch_size=args.batch_size if args.batch_size is not None else env_overrides.get("batch_size", 1),
-        export_format=args.export if args.export is not None else env_overrides.get("export_format"),
-        engine_path=args.engine if args.engine is not None else env_overrides.get("engine_path"),
-        min_detection_frames=args.min_detection_frames if args.min_detection_frames is not None else env_overrides.get("min_detection_frames", 3),
-        min_confidence=args.min_confidence if args.min_confidence is not None else env_overrides.get("min_confidence", 0.3),
+        max_frames=getattr(args, "max_frames", None)
+        if getattr(args, "max_frames", None) is not None
+        else env_overrides.get("max_frames", 0),
+        run_name=getattr(args, "run_name", None)
+        if getattr(args, "run_name", None) is not None
+        else env_overrides.get("run_name", ""),
+        json_output=getattr(args, "json", False) or env_overrides.get("json_output", False),
+        report_format=getattr(args, "report_format", None)
+        if getattr(args, "report_format", None) is not None
+        else env_overrides.get("report_format", "pretty"),
+        adaptive_skip=getattr(args, "adaptive_skip", False) or env_overrides.get("adaptive_skip", False),
+        target_fps=getattr(args, "target_fps", None)
+        if getattr(args, "target_fps", None) is not None
+        else env_overrides.get("target_fps", 15.0),
+        min_skip=getattr(args, "min_skip", None)
+        if getattr(args, "min_skip", None) is not None
+        else env_overrides.get("min_skip", 1),
+        max_skip=getattr(args, "max_skip", None)
+        if getattr(args, "max_skip", None) is not None
+        else env_overrides.get("max_skip", 10),
+        batch_size=getattr(args, "batch_size", None)
+        if getattr(args, "batch_size", None) is not None
+        else env_overrides.get("batch_size", 1),
+        export_format=getattr(args, "export", None)
+        if getattr(args, "export", None) is not None
+        else env_overrides.get("export_format"),
+        engine_path=getattr(args, "engine", None)
+        if getattr(args, "engine", None) is not None
+        else env_overrides.get("engine_path"),
+        min_detection_frames=getattr(args, "min_detection_frames", None)
+        if getattr(args, "min_detection_frames", None) is not None
+        else env_overrides.get("min_detection_frames", 3),
+        min_confidence=getattr(args, "min_confidence", None)
+        if getattr(args, "min_confidence", None) is not None
+        else env_overrides.get("min_confidence", 0.3),
     )
 
     # Se solicitado, exporta o modelo para o formato desejado e encerra.
