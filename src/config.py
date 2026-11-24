@@ -7,6 +7,7 @@ dos arquivos de configuração de zonas (ROI) e de calibração de velocidade.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -78,6 +79,134 @@ def tracker_yaml(name: str) -> str:
         "ocsort": "ocsort.yaml",
     }
     return mapping.get(name.lower(), "bytetrack.yaml")
+
+
+# --------------------------------------------------------------------------- #
+# Carregamento de variáveis de ambiente (.env + SO).
+# --------------------------------------------------------------------------- #
+ENV_FILE = PROJECT_ROOT / ".env"
+
+
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "y", "sim", "on")
+
+
+def _parse_int(value: str | None, default: int) -> int:
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return default
+
+
+def _parse_float(value: str | None, default: float) -> float:
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return float(value.strip())
+    except ValueError:
+        return default
+
+
+def load_env_config() -> dict:
+    """Carrega configurações de ambiente (.env + variáveis do SO).
+
+    Prioridade: variáveis do SO sobrescrevem o arquivo .env.
+    Retorna um dicionário com os valores encontrados (apenas chaves presentes).
+    """
+    env_values = {}
+
+    # Carrega .env se existir (formato simples KEY=VALUE, ignora comentários e linhas vazias).
+    if ENV_FILE.exists():
+        try:
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                env_values[key.strip()] = val.strip()
+        except OSError:
+            pass
+
+    # Variáveis do SO sobrescrevem o .env.
+    for key in (
+        "TRAFFIC_MODEL_PATH",
+        "TRAFFIC_DEFAULT_SOURCE",
+        "TRAFFIC_TRACKER",
+        "TRAFFIC_OUTPUT_DIR",
+        "TRAFFIC_SKIP_FRAMES",
+        "TRAFFIC_CONF",
+        "TRAFFIC_IOU",
+        "TRAFFIC_IMG_SIZE",
+        "TRAFFIC_DEVICE",
+        "TRAFFIC_ZONES_FILE",
+        "TRAFFIC_SPEED_CONFIG_FILE",
+        "TRAFFIC_SAVE_VIDEO",
+        "TRAFFIC_NO_SHOW",
+        "TRAFFIC_MAX_FRAMES",
+        "TRAFFIC_RUN_NAME",
+        "TRAFFIC_JSON_OUTPUT",
+        "TRAFFIC_REPORT_FORMAT",
+    ):
+        val = os.environ.get(key) or ""
+        if val:
+            env_values[key] = val
+
+    return env_values
+
+
+def env_overrides_for_appconfig(env: dict | None = None) -> dict:
+    """Converte variáveis de ambiente em kwargs compatíveis com AppConfig.
+
+    Retorna apenas as chaves que estão presentes no dicionário de ambiente,
+    permitindo que o caller aplique precedência (CLI > env > default).
+    """
+    if env is None:
+        env = load_env_config()
+
+    overrides: dict = {}
+
+    if "TRAFFIC_MODEL_PATH" in env:
+        overrides["model_path"] = env["TRAFFIC_MODEL_PATH"]
+    if "TRAFFIC_DEFAULT_SOURCE" in env:
+        overrides["source"] = env["TRAFFIC_DEFAULT_SOURCE"]
+    if "TRAFFIC_TRACKER" in env:
+        overrides["tracker"] = env["TRAFFIC_TRACKER"]
+    if "TRAFFIC_OUTPUT_DIR" in env:
+        overrides["output_dir"] = env["TRAFFIC_OUTPUT_DIR"]
+    if "TRAFFIC_SKIP_FRAMES" in env:
+        overrides["skip_frames"] = _parse_int(env["TRAFFIC_SKIP_FRAMES"], 1)
+    if "TRAFFIC_CONF" in env:
+        overrides["conf"] = _parse_float(env["TRAFFIC_CONF"], 0.25)
+    if "TRAFFIC_IOU" in env:
+        overrides["iou"] = _parse_float(env["TRAFFIC_IOU"], 0.5)
+    if "TRAFFIC_IMG_SIZE" in env:
+        overrides["imgsz"] = _parse_int(env["TRAFFIC_IMG_SIZE"], 640)
+    if "TRAFFIC_DEVICE" in env:
+        overrides["device"] = env["TRAFFIC_DEVICE"]
+    if "TRAFFIC_ZONES_FILE" in env:
+        overrides["zones_file"] = env["TRAFFIC_ZONES_FILE"]
+    if "TRAFFIC_SPEED_CONFIG_FILE" in env:
+        overrides["speed_file"] = env["TRAFFIC_SPEED_CONFIG_FILE"]
+    if "TRAFFIC_SAVE_VIDEO" in env:
+        overrides["save_video"] = _parse_bool(env["TRAFFIC_SAVE_VIDEO"], False)
+    if "TRAFFIC_NO_SHOW" in env:
+        overrides["show"] = not _parse_bool(env["TRAFFIC_NO_SHOW"], False)
+    if "TRAFFIC_MAX_FRAMES" in env:
+        overrides["max_frames"] = _parse_int(env["TRAFFIC_MAX_FRAMES"], 0)
+    if "TRAFFIC_RUN_NAME" in env:
+        overrides["run_name"] = env["TRAFFIC_RUN_NAME"]
+    if "TRAFFIC_JSON_OUTPUT" in env:
+        overrides["json_output"] = _parse_bool(env["TRAFFIC_JSON_OUTPUT"], False)
+    if "TRAFFIC_REPORT_FORMAT" in env:
+        overrides["report_format"] = env["TRAFFIC_REPORT_FORMAT"]
+
+    return overrides
 
 
 # --------------------------------------------------------------------------- #
