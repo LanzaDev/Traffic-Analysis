@@ -97,6 +97,15 @@ class Detector:
         )
         return [self._parse(r) for r in results]
 
+    def export_model(self, fmt: str) -> str:
+        """Exporta o modelo YOLO para um formato otimizado.
+
+        Suportado: onnx, engine (TensorRT), openvino, ncnn.
+        Retorna o caminho do arquivo exportado.
+        """
+        exported = self.model.export(format=fmt, imgsz=self.imgsz, device=self.device)
+        return str(exported)
+
     def _parse(self, result) -> list[Detection]:
         detections: list[Detection] = []
         boxes = result.boxes

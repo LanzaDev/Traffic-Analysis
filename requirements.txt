@@ -6,3 +6,8 @@ numpy>=1.26.0
 lapx>=0.5.5             # solver de atribuição linear (fornece o módulo `lap`) p/ ByteTrack
 pytest>=8.0.0           # testes unitários
 mypy>=1.11.0            # verificação estática de tipos
+
+# Opcionais para exportação de modelo (--export onnx/engine/openvino/ncnn):
+onnx>=1.12.0,<2.0.0     # necessário para exportar para ONNX
+onnxruntime             # necessário para executar modelos ONNX
+onnxslim>=0.1.82        # otimizador de modelos ONNX

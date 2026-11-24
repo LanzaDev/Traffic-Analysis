@@ -63,7 +63,7 @@ class TrafficAnalyzer:
         self.cfg = cfg
         self.classes = classes_for_mode(cfg.mode)
 
-        model_path = resolve_path(cfg.model_path)
+        model_path = resolve_path(cfg.engine_path if cfg.engine_path else cfg.model_path)
         self.detector = Detector(
             model_path=str(model_path),
             conf=cfg.conf,

@@ -157,6 +157,8 @@ def load_env_config() -> dict:
         "TRAFFIC_MIN_SKIP",
         "TRAFFIC_MAX_SKIP",
         "TRAFFIC_BATCH_SIZE",
+        "TRAFFIC_EXPORT_FORMAT",
+        "TRAFFIC_ENGINE_PATH",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -220,6 +222,10 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["max_skip"] = _parse_int(env["TRAFFIC_MAX_SKIP"], 10)
     if "TRAFFIC_BATCH_SIZE" in env:
         overrides["batch_size"] = _parse_int(env["TRAFFIC_BATCH_SIZE"], 1)
+    if "TRAFFIC_EXPORT_FORMAT" in env:
+        overrides["export_format"] = env["TRAFFIC_EXPORT_FORMAT"]
+    if "TRAFFIC_ENGINE_PATH" in env:
+        overrides["engine_path"] = env["TRAFFIC_ENGINE_PATH"]
 
     return overrides
 
@@ -295,6 +301,8 @@ class AppConfig:
     min_skip: int = 1
     max_skip: int = 10
     batch_size: int = 1
+    export_format: Optional[str] = None  # onnx, engine, openvino, ncnn
+    engine_path: Optional[str] = None  # caminho para modelo TensorRT já exportado
 
 
 # --------------------------------------------------------------------------- #

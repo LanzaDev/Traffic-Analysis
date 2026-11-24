@@ -24,7 +24,7 @@ import argparse
 import logging
 import sys
 
-from src.config import AppConfig, MODES, MODE_LABELS, env_overrides_for_appconfig, load_env_config
+from src.config import AppConfig, MODES, MODE_LABELS, env_overrides_for_appconfig, load_env_config, classes_for_mode
 from src.runner import AnalysisRunner
 
 logging.basicConfig(
@@ -76,6 +76,10 @@ def _common_parser() -> argparse.ArgumentParser:
                    help="Salto máximo no modo adaptativo (padrão 10).")
     p.add_argument("--batch-size", type=int, default=None,
                    help="Tamanho do lote para inferência em batch (padrão 1 = sem batch).")
+    p.add_argument("--export", default=None, choices=["onnx", "engine", "openvino", "ncnn"],
+                   help="Exporta o modelo para o formato especificado e sai.")
+    p.add_argument("--engine", default=None,
+                   help="Caminho para modelo TensorRT já exportado (.engine).")
     return p
 
 
@@ -221,7 +225,25 @@ def main(argv: list[str] | None = None) -> int:
         min_skip=args.min_skip if args.min_skip is not None else env_overrides.get("min_skip", 1),
         max_skip=args.max_skip if args.max_skip is not None else env_overrides.get("max_skip", 10),
         batch_size=args.batch_size if args.batch_size is not None else env_overrides.get("batch_size", 1),
+        export_format=args.export if args.export is not None else env_overrides.get("export_format"),
+        engine_path=args.engine if args.engine is not None else env_overrides.get("engine_path"),
     )
+
+    # Se solicitado, exporta o modelo para o formato desejado e encerra.
+    if cfg.export_format:
+        from src.detector import Detector
+        det = Detector(
+            model_path=cfg.engine_path if cfg.engine_path else cfg.model_path,
+            conf=cfg.conf,
+            iou=cfg.iou,
+            imgsz=cfg.imgsz,
+            device=cfg.device,
+            tracker=cfg.tracker,
+            classes=classes_for_mode(cfg.mode),
+        )
+        out_path = det.export_model(cfg.export_format)
+        print(f"[export] modelo exportado em: {out_path}")
+        return 0
 
     try:
         AnalysisRunner(cfg).run()
