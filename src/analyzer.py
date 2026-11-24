@@ -88,35 +88,117 @@ class TrafficAnalyzer:
         self._wall_start: Optional[float] = None
         self._video_path: Optional[str] = None
 
+        # Buffer para processamento em lote (batch inference).
+        self._pending_frames: list = []
+        self._pending_timestamps: list[float] = []
+        self._pending_indices: list[int] = []
+
     # ------------------------------------------------------------------ #
     def process_frame(
         self, frame, timestamp: float, frame_index: int
-    ) -> FrameResult:
+    ) -> FrameResult | None:
         """Processa um único frame: detecta, conta, estima velocidade.
 
-        Não desenha na tela nem grava vídeo. Retorna um FrameResult com
-        detecções, eventos de contagem e tempo de processamento.
+        Quando batch_size > 1, o frame é acumulado e processado em lote.
+        Retorna um FrameResult quando o frame é processado imediatamente
+        (batch_size == 1) ou quando completa um lote; caso contrário, retorna None
+        e o caller deve chamar flush() no final para processar lotes incompletos.
+        Não desenha na tela nem grava vídeo.
         """
         t0 = time.perf_counter()
 
-        detections = self.detector.track(frame)
-        count_events = self.counter.update(detections, timestamp)
-        self.speed.update(detections, timestamp)
+        # Sem batch: processamento direto (comportamento original).
+        if self.cfg.batch_size <= 1:
+            detections = self.detector.track(frame)
+            count_events = self.counter.update(detections, timestamp)
+            self.speed.update(detections, timestamp)
 
-        dt = time.perf_counter() - t0
-        self.stats.frames_processed += 1
-        self.stats.total_processing_s += dt
+            dt = time.perf_counter() - t0
+            self.stats.frames_processed += 1
+            self.stats.total_processing_s += dt
+            if self.stats.started_at is None:
+                self.stats.started_at = t0
+            self.stats.ended_at = time.perf_counter()
+
+            return FrameResult(
+                frame_index=frame_index,
+                timestamp=timestamp,
+                detections=detections,
+                count_events=count_events,
+                processing_time_s=dt,
+            )
+
+        # Com batch: acumula e processa quando o lote estiver completo.
+        self._pending_frames.append(frame)
+        self._pending_timestamps.append(timestamp)
+        self._pending_indices.append(frame_index)
+
+        if len(self._pending_frames) >= self.cfg.batch_size:
+            return self._flush_batch(t0)
+
+        return None
+
+    # ------------------------------------------------------------------ #
+    def _flush_batch(self, batch_start_t: float) -> FrameResult | None:
+        """Processa o lote acumulado via inferência em batch."""
+        if not self._pending_frames:
+            return None
+
+        frames = self._pending_frames
+        timestamps = self._pending_timestamps
+        indices = self._pending_indices
+
+        # Inferência em lote (batch): todos os frames de uma vez.
+        detections_per_frame = self.detector.track_batch(frames)
+
+        # Processa cada frame individualmente para contagem e velocidade.
+        results: list[FrameResult] = []
+        t_per_frame = (time.perf_counter() - batch_start_t) / max(len(frames), 1)
+
+        for i, (frame, timestamp, frame_idx, detections) in enumerate(
+            zip(frames, timestamps, indices, detections_per_frame)
+        ):
+            count_events = self.counter.update(detections, timestamp)
+            self.speed.update(detections, timestamp)
+
+            self.stats.frames_processed += 1
+            self.stats.total_processing_s += t_per_frame
+
+            results.append(
+                FrameResult(
+                    frame_index=frame_idx,
+                    timestamp=timestamp,
+                    detections=detections,
+                    count_events=count_events,
+                    processing_time_s=t_per_frame,
+                )
+            )
+
         if self.stats.started_at is None:
-            self.stats.started_at = t0
+            self.stats.started_at = batch_start_t
         self.stats.ended_at = time.perf_counter()
 
-        return FrameResult(
-            frame_index=frame_index,
-            timestamp=timestamp,
-            detections=detections,
-            count_events=count_events,
-            processing_time_s=dt,
-        )
+        # Limpa o buffer.
+        self._pending_frames = []
+        self._pending_timestamps = []
+        self._pending_indices = []
+
+        # Retorna o último resultado do lote (o caller exibe o frame mais recente).
+        return results[-1] if results else None
+
+    # ------------------------------------------------------------------ #
+    def flush(self) -> list[FrameResult]:
+        """Processa qualquer lote incompleto restante no buffer.
+
+        Deve ser chamado no final da execução quando batch_size > 1.
+        Retorna a lista de FrameResult dos frames processados no flush.
+        """
+        if not self._pending_frames:
+            return []
+
+        t0 = time.perf_counter()
+        result = self._flush_batch(t0)
+        return [result] if result else []
 
     # ------------------------------------------------------------------ #
     def annotate_frame(

@@ -156,6 +156,7 @@ def load_env_config() -> dict:
         "TRAFFIC_TARGET_FPS",
         "TRAFFIC_MIN_SKIP",
         "TRAFFIC_MAX_SKIP",
+        "TRAFFIC_BATCH_SIZE",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -217,6 +218,8 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["min_skip"] = _parse_int(env["TRAFFIC_MIN_SKIP"], 1)
     if "TRAFFIC_MAX_SKIP" in env:
         overrides["max_skip"] = _parse_int(env["TRAFFIC_MAX_SKIP"], 10)
+    if "TRAFFIC_BATCH_SIZE" in env:
+        overrides["batch_size"] = _parse_int(env["TRAFFIC_BATCH_SIZE"], 1)
 
     return overrides
 
@@ -291,6 +294,7 @@ class AppConfig:
     target_fps: float = 15.0
     min_skip: int = 1
     max_skip: int = 10
+    batch_size: int = 1
 
 
 # --------------------------------------------------------------------------- #

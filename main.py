@@ -74,6 +74,8 @@ def _common_parser() -> argparse.ArgumentParser:
                    help="Salto mínimo no modo adaptativo (padrão 1).")
     p.add_argument("--max-skip", type=int, default=None,
                    help="Salto máximo no modo adaptativo (padrão 10).")
+    p.add_argument("--batch-size", type=int, default=None,
+                   help="Tamanho do lote para inferência em batch (padrão 1 = sem batch).")
     return p
 
 
@@ -218,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         target_fps=args.target_fps if args.target_fps is not None else env_overrides.get("target_fps", 15.0),
         min_skip=args.min_skip if args.min_skip is not None else env_overrides.get("min_skip", 1),
         max_skip=args.max_skip if args.max_skip is not None else env_overrides.get("max_skip", 10),
+        batch_size=args.batch_size if args.batch_size is not None else env_overrides.get("batch_size", 1),
     )
 
     try:

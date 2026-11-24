@@ -78,6 +78,25 @@ class Detector:
         results_list = list(results)
         return self._parse(results_list[0])
 
+    def track_batch(self, frames: list[np.ndarray]) -> list[list[Detection]]:
+        """Detecta + rastreia objetos em um lote de frames.
+
+        Retorna uma lista de listas de Detection (uma por frame do lote).
+        O rastreamento com persist=True mantém IDs entre frames e lotes.
+        """
+        results = self.model.track(
+            source=frames,
+            persist=True,
+            tracker=self.tracker,
+            conf=self.conf,
+            iou=self.iou,
+            imgsz=self.imgsz,
+            device=self.device,
+            classes=self.classes,
+            verbose=False,
+        )
+        return [self._parse(r) for r in results]
+
     def _parse(self, result) -> list[Detection]:
         detections: list[Detection] = []
         boxes = result.boxes

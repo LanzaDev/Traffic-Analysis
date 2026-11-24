@@ -94,6 +94,11 @@ class AnalysisRunner:
             for abs_idx, timestamp, frame in self.source.frames():
                 result = self.analyzer.process_frame(frame, timestamp, abs_idx)
 
+                # Quando batch_size > 1, process_frame pode retornar None
+                # enquanto o lote não está completo.
+                if result is None:
+                    continue
+
                 proc_fps = (
                     self.analyzer.stats.frames_processed
                     / max(1e-6, time.perf_counter() - wall_start)
@@ -149,6 +154,16 @@ class AnalysisRunner:
                         "[runner] limite de %d frames atingido.", cfg.max_frames
                     )
                     break
+
+            # Flush de lotes incompletos quando batch_size > 1.
+            if cfg.batch_size > 1:
+                flush_results = self.analyzer.flush()
+                for flush_result in flush_results:
+                    # Reobter o frame correspondente não é possível aqui;
+                    # o flush apenas garante que a contagem/velocidade sejam atualizadas.
+                    # A exibição/gravação do último frame do lote já foi feita.
+                    pass
+
         except KeyboardInterrupt:
             logger.info("\n[runner] interrompido (Ctrl+C).")
         finally:
