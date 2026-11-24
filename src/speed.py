@@ -5,8 +5,9 @@ para uma vista "Bird's Eye View" métrica. O ponto de contato do veículo com o
 chão (bottom center da bbox) é projetado no plano do chão em metros; o
 deslocamento entre timestamps é convertido de m/s para km/h (× 3.6).
 
-Uma suavização exponencial (EMA) reduz ruído, e um teto de sanidade evita
-picos espúrios causados por trocas de ID ou detecções instáveis.
+Um filtro de Kalman unidimensional reduz ruído nas medições instantâneas e
+produz uma curva de km/h mais estável e responsiva, evitando picos espúrios
+causados por trocas de ID ou detecções instáveis.
 """
 
 from __future__ import annotations
@@ -22,6 +23,68 @@ from .config import SpeedConfig, VEHICLE_CLASSES
 from .detector import Detection
 
 
+class KalmanSpeedFilter:
+    """Filtro de Kalman unidimensional para suavização de velocidade (km/h).
+
+    Estado: velocidade (km/h).
+    Medição: velocidade instantânea calculada a partir do deslocamento.
+    """
+
+    def __init__(
+        self,
+        process_noise: float = 1.0,
+        measurement_noise: float = 10.0,
+        initial_uncertainty: float = 1.0,
+    ) -> None:
+        self.process_noise = process_noise
+        self.measurement_noise = measurement_noise
+
+        self.x: Optional[float] = None  # estimativa de velocidade (km/h)
+        self.p: float = initial_uncertainty  # incerteza da estimativa
+
+    def predict(self) -> None:
+        """Passo de predição: velocidade tende a permanecer constante."""
+        # F = 1 (modelo de velocidade constante)
+        # x = F * x  (x inalterado)
+        # P = F * P * F' + Q
+        if self.x is not None:
+            self.p = self.p + self.process_noise
+
+    def update(self, measurement: float) -> float:
+        """Passo de atualização com uma nova medição instantânea (km/h).
+
+        Retorna a velocidade filtrada (km/h).
+        """
+        if self.x is None:
+            # Primeira medição: inicializa diretamente.
+            self.x = measurement
+            self.p = self.measurement_noise
+            return self.x
+
+        # Predição.
+        self.predict()
+
+        # Ganho de Kalman: K = P * H' / (H * P * H' + R), com H = 1.
+        k = self.p / (self.p + self.measurement_noise)
+
+        # Atualização do estado.
+        self.x = self.x + k * (measurement - self.x)
+
+        # Atualização da incerteza.
+        self.p = (1.0 - k) * self.p
+
+        return self.x
+
+    def get(self) -> Optional[float]:
+        """Retorna a última velocidade filtrada (km/h)."""
+        return self.x
+
+    def reset(self) -> None:
+        """Reseta o filtro."""
+        self.x = None
+        self.p = 1.0
+
+
 class SpeedEstimator:
     """Calcula e suaviza a velocidade (km/h) por ID de veículo rastreado."""
 
@@ -33,6 +96,7 @@ class SpeedEstimator:
         self.last_seen: dict[int, float] = {}
         self.M: Optional[np.ndarray] = None
         self.ppm: float = cfg.pixels_per_meter
+        self.filters: dict[int, KalmanSpeedFilter] = {}
 
         if self.enabled:
             src = np.asarray(cfg.source_points, dtype=np.float32)
@@ -40,6 +104,16 @@ class SpeedEstimator:
             h = cfg.real_height_m * self.ppm
             dst = np.asarray([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
             self.M = cv2.getPerspectiveTransform(src, dst)
+
+    def _get_filter(self, tid: int) -> KalmanSpeedFilter:
+        """Retorna o filtro de Kalman do veículo, criando se necessário."""
+        return self.filters.setdefault(
+            tid,
+            KalmanSpeedFilter(
+                process_noise=self.cfg.kalman_process_noise,
+                measurement_noise=self.cfg.kalman_measurement_noise,
+            ),
+        )
 
     def to_world(self, pt: tuple[float, float]) -> tuple[float, float]:
         """Projeta um ponto da imagem para coordenadas métricas (metros)."""
@@ -83,9 +157,10 @@ class SpeedEstimator:
             instant = (dist / dt) * 3.6  # m/s -> km/h
         instant = min(instant, self.cfg.max_speed_kmh)
 
-        prev = self.speeds.get(tid)
-        a = self.cfg.smoothing_alpha
-        self.speeds[tid] = instant if prev is None else a * instant + (1 - a) * prev
+        # Filtro de Kalman substitui a EMA.
+        kf = self._get_filter(tid)
+        filtered = kf.update(instant)
+        self.speeds[tid] = filtered
 
     def _cleanup(self, timestamp: float, ttl: float = 3.0) -> None:
         stale = [tid for tid, t in self.last_seen.items() if timestamp - t > ttl]
@@ -93,6 +168,7 @@ class SpeedEstimator:
             self.history.pop(tid, None)
             self.speeds.pop(tid, None)
             self.last_seen.pop(tid, None)
+            self.filters.pop(tid, None)
 
     def get(self, tid: Optional[int]) -> Optional[float]:
         if tid is None:

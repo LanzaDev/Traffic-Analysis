@@ -159,6 +159,8 @@ def load_env_config() -> dict:
         "TRAFFIC_BATCH_SIZE",
         "TRAFFIC_EXPORT_FORMAT",
         "TRAFFIC_ENGINE_PATH",
+        "TRAFFIC_KALMAN_PROCESS_NOISE",
+        "TRAFFIC_KALMAN_MEASUREMENT_NOISE",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -226,6 +228,14 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["export_format"] = env["TRAFFIC_EXPORT_FORMAT"]
     if "TRAFFIC_ENGINE_PATH" in env:
         overrides["engine_path"] = env["TRAFFIC_ENGINE_PATH"]
+    if "TRAFFIC_KALMAN_PROCESS_NOISE" in env:
+        overrides["kalman_process_noise"] = _parse_float(
+            env["TRAFFIC_KALMAN_PROCESS_NOISE"], 1.0
+        )
+    if "TRAFFIC_KALMAN_MEASUREMENT_NOISE" in env:
+        overrides["kalman_measurement_noise"] = _parse_float(
+            env["TRAFFIC_KALMAN_MEASUREMENT_NOISE"], 10.0
+        )
 
     return overrides
 
@@ -268,10 +278,12 @@ class SpeedConfig:
     real_width_m: float = 8.0
     real_height_m: float = 20.0
     pixels_per_meter: float = 20.0
-    smoothing_alpha: float = 0.35  # suavização EMA (0..1)
+    smoothing_alpha: float = 0.35  # suavização EMA (0..1) — mantido para retrocompatibilidade
     max_speed_kmh: float = 200.0  # teto de sanidade
     min_displacement_m: float = 0.05  # abaixo disso considera parado
     window_s: float = 0.5  # janela temporal para cálculo do deslocamento
+    kalman_process_noise: float = 1.0  # ruído do processo do filtro de Kalman (Q)
+    kalman_measurement_noise: float = 10.0  # ruído da medição do filtro de Kalman (R)
 
 
 @dataclass
