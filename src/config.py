@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -31,6 +32,35 @@ MODE_LABELS = {
 
 # Raiz do projeto (diretório que contém main.py).
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def has_display() -> bool:
+    """Detecta se há um display gráfico disponível para exibição de janelas.
+
+    - Windows: tenta criar uma janela OpenCV invisível (cv2.namedWindow).
+    - Linux/Unix: verifica a variável de ambiente DISPLAY.
+    - Outros: retorna False (assume headless por segurança).
+    """
+    import sys
+
+    if sys.platform.startswith("linux"):
+        return bool(os.environ.get("DISPLAY"))
+
+    if sys.platform == "win32":
+        try:
+            import cv2
+
+            # Tenta criar uma janela invisível; se falhar, assume headless.
+            cv2.namedWindow("_display_check", cv2.WINDOW_NORMAL)
+            cv2.destroyWindow("_display_check")
+            return True
+        except Exception:
+            return False
+
+    return False
 
 
 def classes_for_mode(mode: str) -> list[int]:

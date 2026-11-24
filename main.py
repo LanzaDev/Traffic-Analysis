@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
-from src.config import AppConfig, MODES, MODE_LABELS, env_overrides_for_appconfig, load_env_config, classes_for_mode
+from src.config import AppConfig, MODES, MODE_LABELS, env_overrides_for_appconfig, load_env_config, classes_for_mode, has_display
 from src.runner import AnalysisRunner
 
 logging.basicConfig(
@@ -58,7 +59,10 @@ def _common_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None, help="Diretório de saída (vídeo/relatórios).")
     p.add_argument("--save-video", action="store_true",
                    help="Grava o vídeo anotado em output/.")
-    p.add_argument("--no-show", action="store_true", help="Não exibe janela (modo headless).")
+    p.add_argument("--show", action="store_const", const=True, default=None,
+                   help="Força exibição de janela (útil quando há display detectado como headless).")
+    p.add_argument("--no-show", action="store_const", const=True, default=None,
+                   help="Não exibe janela (modo headless).")
     p.add_argument("--max-frames", type=int, default=None,
                    help="Limita o nº de frames processados (0 = todos). Útil para testes.")
     p.add_argument("--run-name", default=None, help="Nome base para os arquivos de saída.")
@@ -205,6 +209,21 @@ def main(argv: list[str] | None = None) -> int:
             else env_overrides.get("speed_file", "config/speed.json")
         )
 
+    # Resolução de show com precedência: CLI > env > detecção automática de display.
+    cli_show = None
+    if getattr(args, "show", None) is True:
+        cli_show = True
+    elif getattr(args, "no_show", None) is True:
+        cli_show = False
+
+    if cli_show is not None:
+        show = cli_show
+    elif "TRAFFIC_NO_SHOW" in os.environ:
+        env_val = os.environ["TRAFFIC_NO_SHOW"].strip().lower()
+        show = env_val not in ("1", "true", "yes", "y", "sim", "on")
+    else:
+        show = has_display()
+
     cfg = AppConfig(
         source=source,
         mode=mode,
@@ -219,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         speed_file=speed_config,
         output_dir=args.output if args.output is not None else env_overrides.get("output_dir", "output"),
         save_video=save_video,
-        show=(not args.no_show) if args.no_show else env_overrides.get("show", True),
+        show=show,
         max_frames=args.max_frames if args.max_frames is not None else env_overrides.get("max_frames", 0),
         run_name=args.run_name if args.run_name is not None else env_overrides.get("run_name", ""),
         json_output=args.json or env_overrides.get("json_output", False),
