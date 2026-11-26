@@ -1,0 +1,23 @@
+# data.yaml — Exemplo de configuração de dataset para treinamento/fine-tuning
+# Formato Ultralytics YOLO
+
+# Caminhos para as pastas de imagens (usar caminhos absolutos ou relativos ao
+# local onde o data.yaml está).
+train: ../datasets/ua-detrac/train/images
+val: ../datasets/ua-detrac/val/images
+test: ../datasets/ua-detrac/test/images  # opcional
+
+# Número de classes
+nc: 6
+
+# Nomes das classes (índice 0-5)
+names:
+  0: pedestrian
+  1: car
+  2: motorcycle
+  3: bus
+  4: truck
+  5: articulated_truck
+
+# Exemplo de uso:
+#   python train.py --data config/data.yaml --model models/yolo11m.pt --epochs 100 --imgsz 640 --device 0

@@ -13,3 +13,4 @@ mypy==2.4.1               # verificação estática de tipos
 # onnxruntime             # necessário para executar modelos ONNX
 # onnxslim>=0.1.82        # otimizador de modelos ONNX
 dill>=0.4.1               # necessário para carregar modelos YOLO customizados (.pt)
+supervision>=0.16.0       # zonas, linhas virtuais, anotações e contagem (Supervision)

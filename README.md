@@ -128,7 +128,7 @@ venv\Scripts\python.exe main.py --mode full --no-show --max-frames 100
 |-------|--------|-----------|
 | `--source` | `assets/traffic.mp4` | Vídeo, URL RTSP/HTTP ou índice de webcam |
 | `--mode` | menu | `people` / `vehicles` / `speed` / `full` |
-| `--model` | `models/yolo11n.pt` | Modelo YOLO (aceita `yolov8n.pt`, `yolo_traffic.pt`, `yolo_traffic_classes.pt`) |
+| `--model` | `models/yolo11m.pt` | Modelo YOLO (aceita `yolov8n.pt`, `yolo_traffic.pt`, `yolo_traffic_classes.pt`) |
 | `--tracker` | `bytetrack` | `bytetrack` ou `botsort` |
 | `--skip-frames` | `1` | Processa 1 a cada N frames |
 | `--conf` / `--iou` | `0.25` / `0.5` | Limiares de detecção / NMS |
@@ -245,11 +245,16 @@ Em `output/` (com `--save-video` e/ou ao final de cada execução):
 ## 📝 Notas técnicas
 
 - **YOLOv8 / YOLO11**: a API Ultralytics é a mesma; o projeto aceita qualquer modelo, ex. `--model yolov8n.pt`.
-  - `models/yolo11n.pt` — **padrão**. COCO original (detecta person, car, truck, bus, motorcycle, etc.). Melhor detecção geral e mais classes.
+  - `models/yolo11m.pt` — **padrão**. YOLO11 Medium (COCO). Detecta person, car, truck, bus, motorcycle, etc. Melhor detecção geral que o nano.
+  - `models/yolo11n.pt` — COCO original nano (detecta person, car, truck, bus, motorcycle, etc.). Mais leve, menos preciso.
   - `models/yolo_traffic.pt` — classe genérica `Vehicle` (detecta veículos sem distinguir tipo).
   - `models/yolo_traffic_classes.pt` — YOLOv8 Nano treinado com 8 classes separadas (auto, bus, car, lcv, motorcycle, multiaxle, tractor, truck). Não detecta pessoas e pode perder detecções em cenas complexas.
-- **Classes COCO**: `person=0`, `car=2`, `motorcycle=3`, `bus=5`, `truck=7`.
-  O alias `motorbike` do enunciado é mapeado para `motorcycle`.
+- **Classes da concessionária**: `pedestrian`, `car`, `motorcycle`, `bus`, `truck`, `articulated_truck`.
+  Quando usando modelo COCO padrão (`yolo11m.pt` / `yolo11n.pt`), o mapeamento é:
+  `person=0`, `car=2`, `motorcycle=3`, `bus=5`, `truck=7`.
+  O alias `motorbike` é mapeado para `motorcycle`.
+  A classe `articulated_truck` exige um modelo customizado (COCO não tem classe separada).
+- **Supervision**: usado para anotação de zonas (sv.Zone, sv.LineZone) e bounding boxes (sv.BoxAnnotator) quando disponível. Caso contrário, usa OpenCV puro como fallback.
 - **Desempenho**: em CPU, `--skip-frames 2..4` e `--imgsz 480` ajudam a manter
   fluidez em CCTV. Streams ao vivo usam buffer mínimo e reconexão automática.
 - **Rastreamento**: ByteTrack (padrão) mantém IDs persistentes; BoT-SORT

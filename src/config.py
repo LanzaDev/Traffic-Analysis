@@ -14,12 +14,48 @@ from pathlib import Path
 from typing import Optional
 
 # --------------------------------------------------------------------------- #
-# Classes COCO utilizadas pelo modelo pré-treinado (yolo11n / yolov8n).
+# --------------------------------------------------------------------------- #
+# Classes COCO utilizadas pelo modelo pré-treinado (yolo11n / yolov8n / yolo11m).
 # --------------------------------------------------------------------------- #
 PERSON_CLASS = 0
 # COCO usa "motorcycle"; aceitamos também o alias "motorbike" citado no enunciado.
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 CLASS_ALIASES = {"motorbike": "motorcycle"}
+
+# Classes da concessionária (mapeamento para classes COCO quando usar modelo padrão).
+# Nota: COCO não tem classe separada para "caminhão articulado"; usa "truck" (7).
+CONCESSIONARIA_CLASSES = {
+    "pedestrian": 0,      # person
+    "car": 2,             # car
+    "motorcycle": 3,      # motorcycle
+    "bus": 5,             # bus
+    "truck": 7,           # truck
+    "articulated_truck": 7,  # truck (COCO não tem classe separada; exige modelo customizado)
+}
+CONCESSIONARIA_CLASS_NAMES = {
+    0: "pedestrian",
+    2: "car",
+    3: "motorcycle",
+    5: "bus",
+    7: "truck",
+    70: "articulated_truck",  # ID sintético para modelo customizado
+}
+
+# Configurações de Re-ID (re-identificação de objetos)
+REID_MAX_DISTANCE_M: float = 15.0  # distância máxima em metros para considerar mesmo objeto
+REID_MAX_TIME_S: float = 5.0  # tempo máximo (s) que um objeto pode ficar "desaparecido"
+REID_COLOR_TOLERANCE: float = 0.3  # tolerância de diferença de cor (0-1, menor = mais rígido)
+REID_MIN_CONFIDENCE: float = 0.4  # confiança mínima para considerar re-ID válido
+
+# Configurações de zonas e tipos
+ZONE_TYPE_ROAD = "road"  # zona de pista (rodovia)
+ZONE_TYPE_SIDEWALK = "sidewalk"  # zona de calçada
+ZONE_TYPE_AVOID = "avoid"  # zona proibida/área de risco
+
+# Configurações de sentido de linha
+LINE_DIRECTION_INBOUND = "inbound"  # sentido de entrada
+LINE_DIRECTION_OUTBOUND = "outbound"  # sentido de saída
+LINE_DIRECTION_BIDIRECTIONAL = "bidirectional"  # mão dupla
 
 MODES = ("people", "vehicles", "speed", "full")
 
@@ -193,6 +229,9 @@ def load_env_config() -> dict:
         "TRAFFIC_KALMAN_MEASUREMENT_NOISE",
         "TRAFFIC_MIN_DETECTION_FRAMES",
         "TRAFFIC_MIN_CONFIDENCE",
+        "TRAFFIC_MIN_STOPPED_S",
+        "TRAFFIC_EVAL",
+        "TRAFFIC_GT",
     ):
         val = os.environ.get(key) or ""
         if val:
@@ -276,6 +315,20 @@ def env_overrides_for_appconfig(env: dict | None = None) -> dict:
         overrides["min_confidence"] = _parse_float(
             env["TRAFFIC_MIN_CONFIDENCE"], 0.3
         )
+    if "TRAFFIC_MIN_STOPPED_S" in env:
+        overrides["min_stopped_s"] = _parse_float(env["TRAFFIC_MIN_STOPPED_S"], 2.0)
+    if "TRAFFIC_EVAL" in env:
+        overrides["eval_mode"] = _parse_bool(env["TRAFFIC_EVAL"], False)
+    if "TRAFFIC_GT" in env:
+        overrides["gt_path"] = env["TRAFFIC_GT"]
+    if "TRAFFIC_REID_ENABLED" in env:
+        overrides["reid_enabled"] = _parse_bool(env["TRAFFIC_REID_ENABLED"], True)
+    if "TRAFFIC_REID_MAX_DISTANCE_M" in env:
+        overrides["reid_max_distance_m"] = _parse_float(env["TRAFFIC_REID_MAX_DISTANCE_M"], 15.0)
+    if "TRAFFIC_REID_MAX_TIME_S" in env:
+        overrides["reid_max_time_s"] = _parse_float(env["TRAFFIC_REID_MAX_TIME_S"], 5.0)
+    if "TRAFFIC_REID_COLOR_TOLERANCE" in env:
+        overrides["reid_color_tolerance"] = _parse_float(env["TRAFFIC_REID_COLOR_TOLERANCE"], 0.3)
 
     return overrides
 
@@ -291,15 +344,23 @@ class ZoneConfig:
     type: str  # "polygon" | "line"
     points: list  # lista de [x, y]
     color: Optional[list] = None  # [B, G, R] opcional
+    zone_type: str = ZONE_TYPE_ROAD  # "road", "sidewalk", "avoid"
+    line_direction: str = LINE_DIRECTION_BIDIRECTIONAL  # "inbound", "outbound", "bidirectional"
 
     def __post_init__(self) -> None:
         self.type = self.type.lower()
+        self.zone_type = self.zone_type.lower()
+        self.line_direction = self.line_direction.lower()
         if self.type not in ("polygon", "line"):
             raise ValueError(f"Tipo de zona inválido: {self.type}")
         if self.type == "polygon" and len(self.points) < 3:
             raise ValueError(f"Polígono '{self.name}' precisa de >= 3 pontos.")
         if self.type == "line" and len(self.points) != 2:
             raise ValueError(f"Linha '{self.name}' precisa de exatamente 2 pontos.")
+        if self.zone_type not in (ZONE_TYPE_ROAD, ZONE_TYPE_SIDEWALK, ZONE_TYPE_AVOID):
+            raise ValueError(f"Tipo de zona inválido: {self.zone_type}")
+        if self.line_direction not in (LINE_DIRECTION_INBOUND, LINE_DIRECTION_OUTBOUND, LINE_DIRECTION_BIDIRECTIONAL):
+            raise ValueError(f"Direção de linha inválida: {self.line_direction}")
 
 
 @dataclass
@@ -334,7 +395,7 @@ class AppConfig:
 
     source: str = "assets/traffic.mp4"
     mode: str = "full"
-    model_path: str = "models/yolo11n.pt"
+    model_path: str = "models/yolo11m.pt"
     conf: float = 0.25
     iou: float = 0.5
     imgsz: int = 640
@@ -359,6 +420,13 @@ class AppConfig:
     engine_path: Optional[str] = None  # caminho para modelo TensorRT já exportado
     min_detection_frames: int = 3  # mínimo de frames consecutivos para exibir velocidade
     min_confidence: float = 0.3  # confiança média mínima para exibir velocidade
+    min_stopped_s: float = 2.0  # tempo mínimo (s) para considerar veículo parado
+    eval_mode: bool = False  # modo de avaliação (métricas mAP, precisão, recall, F1)
+    gt_path: Optional[str] = None  # caminho para arquivo de ground truth (COCO JSON ou YOLO TXT)
+    reid_enabled: bool = True  # habilitar re-identificação de objetos
+    reid_max_distance_m: float = 15.0  # distância máxima em metros para re-ID
+    reid_max_time_s: float = 5.0  # tempo máximo (s) para considerar objeto desaparecido
+    reid_color_tolerance: float = 0.3  # tolerância de diferença de cor (0-1)
 
 
 # --------------------------------------------------------------------------- #

@@ -13,7 +13,12 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .config import ZoneConfig
+from .config import (
+    LINE_DIRECTION_BIDIRECTIONAL,
+    LINE_DIRECTION_INBOUND,
+    LINE_DIRECTION_OUTBOUND,
+    ZoneConfig,
+)
 
 Point = tuple[float, float]
 
@@ -46,6 +51,8 @@ class Zone:
     def __init__(self, cfg: ZoneConfig) -> None:
         self.name = cfg.name
         self.type = cfg.type
+        self.zone_type = cfg.zone_type  # "road", "sidewalk", "avoid"
+        self.line_direction = cfg.line_direction  # "inbound", "outbound", "bidirectional"
         self.points = np.array(cfg.points, dtype=np.float32)
         if cfg.color:
             self.color = tuple(int(c) for c in cfg.color)
@@ -85,6 +92,25 @@ class Zone:
         if side_prev > 0 >= side_curr:
             return "out"
         return "in"
+
+    def crossing_direction(self, prev: Point, curr: Point) -> Optional[str]:
+        """Retorna 'inbound'/'outbound' se o movimento cruza a linha no sentido esperado.
+
+        Retorna None se não houver cruzamento ou se a linha for bidirecional.
+        """
+        if self.type != "line":
+            return None
+        crossing = self.crossing(prev, curr)
+        if crossing is None:
+            return None
+        if self.line_direction == LINE_DIRECTION_BIDIRECTIONAL:
+            return crossing  # não há sentido definido
+        # Para linhas unidirecionais, o sentido depende da direção da linha
+        # Se p1->p2 é "inbound", então crossing "in" = inbound, "out" = outbound
+        if self.line_direction == LINE_DIRECTION_INBOUND:
+            return "inbound" if crossing == "in" else "outbound"
+        else:  # LINE_DIRECTION_OUTBOUND
+            return "outbound" if crossing == "in" else "inbound"
 
 
 def build_zones(configs: list[ZoneConfig]) -> list[Zone]:

@@ -1,8 +1,8 @@
 """Interface visual: bounding boxes, IDs, zonas ROI, contadores e velocidade.
 
-Desenha sobre o frame:
-    - Polígonos/linhas de ROI com nome e contagem.
-    - Bounding boxes coloridas por classe, com ID e confiança.
+Desenha sobre o frame usando Supervision (sv) quando disponível:
+    - Polígonos/linhas de ROI com nome e contagem (sv.Zone, sv.LineZone).
+    - Bounding boxes coloridas por classe, com ID e confiança (sv.BoxAnnotator).
     - Rótulo de velocidade (km/h) abaixo dos veículos.
     - Painel HUD com modo, FPS, totais e contagens por zona.
 """
@@ -13,6 +13,14 @@ from typing import Optional
 
 import cv2
 import numpy as np
+
+try:
+    import supervision as sv
+
+    _HAS_SUPERVISION = True
+except ImportError:  # pragma: no cover - supervision opcional
+    sv = None  # type: ignore
+    _HAS_SUPERVISION = False
 
 from .config import PERSON_CLASS
 from .counter import ObjectCounter
@@ -35,6 +43,11 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX
 class Visualizer:
     def __init__(self, show_speed: bool = True) -> None:
         self.show_speed = show_speed
+        self._box_annotator = (
+            sv.BoxAnnotator(thickness=2)
+            if _HAS_SUPERVISION
+            else None
+        )
 
     def draw(
         self,
@@ -72,35 +85,78 @@ class Visualizer:
                 cv2.line(img, p1, p2, z.color, 3)
                 cv2.circle(img, p1, 5, z.color, -1)
                 cv2.circle(img, p2, 5, z.color, -1)
-                mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+                mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2 - 10)
                 ins, outs = counter.zone_in_out(z.name)
                 text = f"{z.name}: {counter.zone_count(z.name)} (IN {ins}/OUT {outs})"
-                self._label(img, text, (mid[0], mid[1] - 10), z.color)
+                self._label(img, text, mid, z.color)
         # Mistura o preenchimento translúcido dos polígonos.
         cv2.addWeighted(overlay, 0.18, img, 0.82, 0, img)
 
     def _draw_detections(
         self, img: np.ndarray, detections: list[Detection], speed: Optional[SpeedEstimator]
     ) -> None:
-        for d in detections:
-            color = CLASS_COLORS.get(d.class_id, DEFAULT_COLOR)
-            x1, y1, x2, y2 = (int(v) for v in d.bbox)
-            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+        if _HAS_SUPERVISION and self._box_annotator is not None and detections:
+            # Converter detecções para formato supervision.
+            xyxy = np.array([d.bbox for d in detections], dtype=np.float32)
+            confidences = np.array([d.confidence for d in detections], dtype=np.float32)
+            class_ids = np.array([d.class_id for d in detections], dtype=np.int32)
+            tracker_ids = np.array(
+                [d.track_id if d.track_id is not None else -1 for d in detections],
+                dtype=np.int32,
+            )
 
-            tid = d.track_id if d.track_id is not None else "?"
-            label = f"ID{tid} {d.class_name} {d.confidence:.2f}"
-            self._label(img, label, (x1, max(0, y1 - 6)), color)
+            detections_sv = sv.Detections(
+                xyxy=xyxy,
+                confidence=confidences,
+                class_id=class_ids,
+                tracker_id=tracker_ids,
+            )
 
-            # Rótulo de velocidade abaixo do veículo.
-            if self.show_speed and speed is not None and d.is_vehicle:
-                kmh = speed.get(d.track_id)
-                if kmh is not None:
-                    self._label(
-                        img,
-                        f"{kmh:.0f} km/h",
-                        (x1, min(img.shape[0] - 4, y2 + 16)),
-                        (0, 255, 255),
-                    )
+            # Anotar boxes com supervision (sem rótulos de texto).
+            annotated = self._box_annotator.annotate(
+                scene=img.copy(), detections=detections_sv
+            )
+            img[:] = annotated[:]
+
+            # Desenhar rótulos de ID/confiança com OpenCV (supervision não aceita labels neste método).
+            for d in detections:
+                color = CLASS_COLORS.get(d.class_id, DEFAULT_COLOR)
+                x1, y1, x2, y2 = (int(v) for v in d.bbox)
+                tid = d.track_id if d.track_id is not None else "?"
+                label = f"ID{tid} {d.class_name} {d.confidence:.2f}"
+                self._label(img, label, (x1, max(0, y1 - 6)), color)
+
+                # Rótulo de velocidade abaixo do veículo.
+                if self.show_speed and speed is not None and d.is_vehicle:
+                    kmh = speed.get(d.track_id)
+                    if kmh is not None:
+                        self._label(
+                            img,
+                            f"{kmh:.0f} km/h",
+                            (x1, min(img.shape[0] - 4, y2 + 16)),
+                            (0, 255, 255),
+                        )
+        else:
+            # Fallback: desenho puro OpenCV.
+            for d in detections:
+                color = CLASS_COLORS.get(d.class_id, DEFAULT_COLOR)
+                x1, y1, x2, y2 = (int(v) for v in d.bbox)
+                cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+
+                tid = d.track_id if d.track_id is not None else "?"
+                label = f"ID{tid} {d.class_name} {d.confidence:.2f}"
+                self._label(img, label, (x1, max(0, y1 - 6)), color)
+
+                # Rótulo de velocidade abaixo do veículo.
+                if self.show_speed and speed is not None and d.is_vehicle:
+                    kmh = speed.get(d.track_id)
+                    if kmh is not None:
+                        self._label(
+                            img,
+                            f"{kmh:.0f} km/h",
+                            (x1, min(img.shape[0] - 4, y2 + 16)),
+                            (0, 255, 255),
+                        )
 
     def _draw_hud(
         self,

@@ -219,6 +219,11 @@ class AnalysisRunner:
         parts.append(f"veiculos={veh}")
         for zname, zdata in s["zones"].items():
             parts.append(f"{zname}={zdata['count']}")
+        incident_count = len(self.analyzer.incident_detector.get_active_incidents())
+        stopped_count = len(self.analyzer.stopped_detector.get_stopped_ids())
+        if incident_count or stopped_count:
+            parts.append(f"parados={stopped_count}")
+            parts.append(f"incidentes={incident_count}")
         logger.info("[proc] %s", " | ".join(parts))
 
     def _save_report(self, report: dict) -> None:
@@ -240,6 +245,23 @@ class AnalysisRunner:
                 )
         logger.info("[runner] relatório: %s", json_path)
         logger.info("[runner] CSV zonas: %s", csv_path)
+
+        # CSV de incidentes
+        incident_csv_path = self.output_dir / f"{name}_{stamp}_incidents.csv"
+        with incident_csv_path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["tipo", "track_id", "zona", "timestamp", "descricao"])
+            for inc in report.get("incidents", []):
+                w.writerow(
+                    [
+                        inc.get("incident_type", inc.get("type", "")),
+                        inc.get("track_id", ""),
+                        inc.get("zone", ""),
+                        inc.get("timestamp", ""),
+                        inc.get("description", ""),
+                    ]
+                )
+        logger.info("[runner] CSV incidentes: %s", incident_csv_path)
 
     def _print_summary(self, report: dict) -> None:
         c = report["counting"]
@@ -263,5 +285,24 @@ class AnalysisRunner:
             print(
                 f"  Velocidade média: {report['speed']['avg_kmh']} km/h | "
                 f"máxima: {report['speed']['max_kmh']} km/h"
+            )
+        sv = report.get("stopped_vehicles", {})
+        if sv.get("count", 0) > 0:
+            print(f"  Veículos parados: {sv['count']} (IDs: {sv['ids']})")
+        incs = report.get("incidents", [])
+        if incs:
+            print(f"  Incidentes detectados: {len(incs)}")
+            for inc in incs[:10]:
+                print(
+                    f"    - {inc.get('type', inc.get('incident_type', ''))}: "
+                    f"{inc.get('description', '')}"
+                )
+            if len(incs) > 10:
+                print(f"    ... e mais {len(incs) - 10}")
+        rid = report.get("reid", {})
+        if rid.get("reid_count", 0) > 0:
+            print(
+                f"  Re-ID: {rid['reid_count']} objeto(s) reidentificado(s), "
+                f"{rid['lost_objects']} ainda perdido(s)"
             )
         print("=" * 64)

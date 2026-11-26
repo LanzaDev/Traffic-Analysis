@@ -84,10 +84,24 @@ def _common_parser() -> argparse.ArgumentParser:
                    help="Mínimo de frames consecutivos para exibir velocidade (padrão 3).")
     p.add_argument("--min-confidence", type=float, default=None,
                    help="Confiança média mínima para exibir velocidade (padrão 0.3).")
+    p.add_argument("--min-stopped-s", type=float, default=None,
+                   help="Tempo mínimo (s) para considerar veículo parado (padrão 2.0).")
+    p.add_argument("--reid-enabled", action="store_true",
+                   help="Habilitar re-identificação de objetos (evitar ID duplicado quando objeto reaparece).")
+    p.add_argument("--reid-max-distance-m", type=float, default=None,
+                   help="Distância máxima em metros para re-ID (padrão 15.0).")
+    p.add_argument("--reid-max-time-s", type=float, default=None,
+                   help="Tempo máximo (s) para considerar objeto desaparecido (padrão 5.0).")
+    p.add_argument("--reid-color-tolerance", type=float, default=None,
+                   help="Tolerância de diferença de cor para re-ID 0-1 (padrão 0.3).")
     p.add_argument("--export", default=None, choices=["onnx", "engine", "openvino", "ncnn"],
                    help="Exporta o modelo para o formato especificado e sai.")
     p.add_argument("--engine", default=None,
                    help="Caminho para modelo TensorRT já exportado (.engine).")
+    p.add_argument("--eval", action="store_true",
+                   help="Modo de avaliação: calcula métricas (mAP, precisão, recall, F1, erro de contagem) comparando com ground truth.")
+    p.add_argument("--gt", default=None,
+                   help="Caminho para arquivo de ground truth (COCO JSON ou YOLO TXT) para avaliação.")
     return p
 
 
@@ -229,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=mode,
         model_path=getattr(args, "model", None)
         if getattr(args, "model", None) is not None
-        else env_overrides.get("model_path", "models/yolo11n.pt"),
+        else env_overrides.get("model_path", "models/yolo11m.pt"),
         conf=getattr(args, "conf", None)
         if getattr(args, "conf", None) is not None
         else env_overrides.get("conf", 0.25),
@@ -290,6 +304,24 @@ def main(argv: list[str] | None = None) -> int:
         min_confidence=getattr(args, "min_confidence", None)
         if getattr(args, "min_confidence", None) is not None
         else env_overrides.get("min_confidence", 0.3),
+        min_stopped_s=getattr(args, "min_stopped_s", None)
+        if getattr(args, "min_stopped_s", None) is not None
+        else env_overrides.get("min_stopped_s", 2.0),
+        eval_mode=getattr(args, "eval", False) or env_overrides.get("eval_mode", False),
+        gt_path=getattr(args, "gt", None)
+        if getattr(args, "gt", None) is not None
+        else env_overrides.get("gt_path"),
+        reid_enabled=getattr(args, "reid_enabled", False)
+        or env_overrides.get("reid_enabled", True),
+        reid_max_distance_m=getattr(args, "reid_max_distance_m", None)
+        if getattr(args, "reid_max_distance_m", None) is not None
+        else env_overrides.get("reid_max_distance_m", 15.0),
+        reid_max_time_s=getattr(args, "reid_max_time_s", None)
+        if getattr(args, "reid_max_time_s", None) is not None
+        else env_overrides.get("reid_max_time_s", 5.0),
+        reid_color_tolerance=getattr(args, "reid_color_tolerance", None)
+        if getattr(args, "reid_color_tolerance", None) is not None
+        else env_overrides.get("reid_color_tolerance", 0.3),
     )
 
     # Se solicitado, exporta o modelo para o formato desejado e encerra.

@@ -7,13 +7,14 @@ O rastreamento frame a frame usa `persist=True` para manter os IDs entre frames.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
+import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from .config import VEHICLE_CLASSES, tracker_yaml
+from .config import CONCESSIONARIA_CLASS_NAMES, VEHICLE_CLASSES, tracker_yaml
 
 
 @dataclass
@@ -26,6 +27,7 @@ class Detection:
     confidence: float
     bbox: tuple  # (x1, y1, x2, y2)
     bottom_center: tuple  # (cx, y2) — ponto de contato com o chão
+    color_hist: Optional[np.ndarray] = None  # histograma de cor da região da bbox
 
     @property
     def is_vehicle(self) -> bool:
@@ -106,6 +108,27 @@ class Detector:
         exported = self.model.export(format=fmt, imgsz=self.imgsz, device=self.device)
         return str(exported)
 
+    @staticmethod
+    def extract_color_hist(frame: np.ndarray, bbox: tuple) -> Optional[np.ndarray]:
+        """Extrai histograma de cor HSV da região da bbox para Re-ID."""
+        try:
+            x1, y1, x2, y2 = [int(v) for v in bbox]
+            h, w = frame.shape[:2]
+            x1 = max(0, min(x1, w - 1))
+            y1 = max(0, min(y1, h - 1))
+            x2 = max(x1 + 1, min(x2, w))
+            y2 = max(y1 + 1, min(y2, h))
+
+            roi = frame[y1:y2, x1:x2]
+            if roi.size == 0:
+                return None
+
+            hist = cv2.calcHist([roi], [0, 1], None, [50, 60], [0, 180, 0, 256])
+            cv2.normalize(hist, hist)
+            return hist.flatten()
+        except Exception:
+            return None
+
     def _parse(self, result) -> list[Detection]:
         detections: list[Detection] = []
         boxes = result.boxes
@@ -128,6 +151,7 @@ class Detector:
                     confidence=float(conf),
                     bbox=(float(x1), float(y1), float(x2), float(y2)),
                     bottom_center=(float(cx), float(y2)),
+                    color_hist=None,  # preenchido posteriormente pelo analyzer
                 )
             )
         return detections

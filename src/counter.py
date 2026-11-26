@@ -3,6 +3,13 @@
 Cada zona mantém um conjunto (set) de IDs já contados, garantindo que um objeto
 seja contabilizado apenas na PRIMEIRA travessia/presença, evitando duplicidade
 entre frames. Também mantém contagens globais únicas por classe.
+
+Detecta incidentes:
+    - Veículos em contramão (cruzando linha na direção oposta ao esperado)
+    - Pedestres em zonas de pista (não calçadas)
+
+Integra com o Re-ID para manter IDs consistentes quando objetos reaparecem
+após ficar fora de vista (oclusão, distância, imagem borrada).
 """
 
 from __future__ import annotations
@@ -10,7 +17,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from .config import (
+    LINE_DIRECTION_BIDIRECTIONAL,
+    LINE_DIRECTION_INBOUND,
+    LINE_DIRECTION_OUTBOUND,
+    ZONE_TYPE_ROAD,
+    ZONE_TYPE_SIDEWALK,
+)
 from .detector import Detection
+from .incidents import PedestrianOnRoadEvent, WrongWayEvent
 from .zones import Zone
 
 
@@ -26,7 +41,12 @@ class CountEvent:
 
 
 class ObjectCounter:
-    """Contabiliza objetos por zona e globalmente usando sets de IDs."""
+    """Contabiliza objetos por zona e globalmente usando sets de IDs.
+
+    Detecta incidentes de tráfego:
+        - Contramão: veículo cruzando linha na direção oposta ao esperado
+        - Pedestre na pista: pessoa detectada dentro de zona de rodovia
+    """
 
     def __init__(self, zones: list[Zone]) -> None:
         self.zones = zones
@@ -38,8 +58,13 @@ class ObjectCounter:
         # Contagens globais únicas.
         self.global_ids: set[int] = set()
         self.class_ids: dict[str, set[int]] = {}
+        # Eventos de incidente acumulados
+        self.wrong_way_events: list = []
+        self.pedestrian_events: list = []
 
-    def update(self, detections: list[Detection], timestamp: float) -> list[CountEvent]:
+    def update(
+        self, detections: list[Detection], timestamp: float
+    ) -> list[CountEvent]:
         """Atualiza contadores com as detecções do frame; retorna novos eventos."""
         events: list[CountEvent] = []
         for d in detections:
@@ -67,6 +92,43 @@ class ObjectCounter:
                     self.zone_ids[z.name].add(tid)
                     self.zone_direction[(z.name, tid)] = direction
                     events.append(CountEvent(z.name, tid, d.class_name, direction, timestamp))
+
+                # Detecção de contramão (apenas em zonas de estrada)
+                if (
+                    z.type == "line"
+                    and z.zone_type == "road"
+                    and prev is not None
+                ):
+                    crossing_direction = z.crossing_direction(prev, pt)
+                    if crossing_direction and crossing_direction != LINE_DIRECTION_BIDIRECTIONAL:
+                        # Determinar se é contramão
+                        expected = z.line_direction
+                        detected = crossing_direction
+                        if expected != detected:
+                            self.wrong_way_events.append(
+                                WrongWayEvent(
+                                    track_id=tid,
+                                    class_name=d.class_name,
+                                    zone=z.name,
+                                    direction=detected,
+                                    timestamp=timestamp,
+                                )
+                            )
+
+                # Detecção de pedestre na pista (apenas zonas de estrada)
+                if (
+                    z.type == "polygon"
+                    and z.zone_type == "road"
+                    and d.class_name.lower() in ("person", "pedestrian")
+                    and z.contains(pt)
+                ):
+                    self.pedestrian_events.append(
+                        PedestrianOnRoadEvent(
+                            track_id=tid,
+                            zone=z.name,
+                            timestamp=timestamp,
+                        )
+                    )
 
             self.last_pos[tid] = pt
 
@@ -97,7 +159,17 @@ class ObjectCounter:
                     "in": self.zone_in_out(z.name)[0],
                     "out": self.zone_in_out(z.name)[1],
                     "type": z.type,
+                    "zone_type": z.zone_type,
+                    "line_direction": z.line_direction if z.type == "line" else None,
                 }
                 for z in self.zones
             },
         }
+
+    def get_wrong_way_events(self) -> list:
+        """Retorna eventos de contramão acumulados."""
+        return self.wrong_way_events
+
+    def get_pedestrian_events(self) -> list:
+        """Retorna eventos de pedestre na pista acumulados."""
+        return self.pedestrian_events
