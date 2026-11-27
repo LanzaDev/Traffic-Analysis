@@ -1,0 +1,9 @@
+names:
+- person
+- car
+- motorcycle
+- bus
+- truck
+nc: 5
+train: C:\Users\lucas.lanza\Desktop\traffic_analysis\datasets\sample\coco128\images\train
+val: C:\Users\lucas.lanza\Desktop\traffic_analysis\datasets\sample\coco128\images\val

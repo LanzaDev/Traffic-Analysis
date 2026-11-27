@@ -1,145 +1,128 @@
-"""Script de treinamento/fine-tuning de modelos YOLO para análise de tráfego.
+#!/usr/bin/env python3
+"""
+Treinador Simples YOLO11m - Baixa dataset público e treina
 
-Permite treinar yolo11m.pt (ou qualquer modelo Ultralytics) com datasets
-no formato YAML do Ultralytics, incluindo UA-DETRAC, BDD100K, VisDrone
-e imagens próprias de câmeras rodoviárias.
+Uso:
+    python train.py --epochs 50 --imgsz 640 --batch 16 --device 0
 
-Exemplos de uso:
-
-    # Treinar yolo11m.pt com dataset próprio
-    python train.py --data config/data.yaml --model models/yolo11m.pt --epochs 100 --imgsz 640
-
-    # Treinar com validação
-    python train.py --data config/data.yaml --epochs 50 --imgsz 640 --val
-
-    # Validar um modelo já treinado
-    python train.py --data config/data.yaml --model runs/detect/train/weights/best.pt --val-only
+Para treinar com seus próprios dados:
+    python train.py --data seu_dataset/data.yaml --epochs 100 --device 0
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Optional
 
+import cv2
+import numpy as np
+import requests
+from tqdm import tqdm
 from ultralytics import YOLO
 
-# Classes da concessionária (mapeamento para COCO quando usar modelo padrão)
-CONCESSIONARIA_CLASSES = {
-    0: "pedestrian",
-    2: "car",
-    3: "motorcycle",
-    5: "bus",
-    7: "truck",
-    70: "articulated_truck",  # ID sintético para modelo customizado
-}
+# Diretórios
+PROJECT_ROOT = Path(__file__).resolve().parent
+DATASETS_DIR = PROJECT_ROOT / "datasets"
+MODELS_DIR = PROJECT_ROOT / "models"
 
-CONCESSIONARIA_NAMES = [
-    "pedestrian",
-    "car",
-    "motorcycle",
-    "bus",
-    "truck",
-    "articulated_truck",
-]
+# Classes do projeto
+TRAFFIC_CLASSES = ["person", "car", "motorcycle", "bus", "truck"]
+
+# Dataset público pequeno
+DATASET_URL = "https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip"
 
 
-def build_data_yaml(
-    output_path: str | Path,
-    train_dir: str | Path,
-    val_dir: str | Path,
-    test_dir: Optional[str | Path] = None,
-    nc: int = 6,
-    names: Optional[list[str]] = None,
-) -> Path:
-    """Gera um arquivo data.yaml no formato Ultralytics.
+def download_file(url: str, output_path: Path) -> None:
+    """Baixa arquivo com barra de progresso."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    Parameters
-    ----------
-    output_path : str | Path
-        Caminho onde salvar o data.yaml.
-    train_dir : str | Path
-        Diretório com imagens de treino.
-    val_dir : str | Path
-        Diretório com imagens de validação.
-    test_dir : str | Path, optional
-        Diretório com imagens de teste.
-    nc : int
-        Número de classes.
-    names : list[str], optional
-        Lista de nomes das classes.
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
 
-    Returns
-    -------
-    Path
-        Caminho do arquivo gerado.
-    """
-    if names is None:
-        names = CONCESSIONARIA_NAMES[:nc]
+    total_size = int(response.headers.get("content-length", 0))
+
+    with open(output_path, "wb") as f, tqdm(
+        desc=output_path.name, total=total_size, unit="B", unit_scale=True
+    ) as pbar:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+                pbar.update(len(chunk))
+
+
+def extract_zip(zip_path: Path, extract_to: Path) -> None:
+    """Extrai arquivo ZIP."""
+    import zipfile
+
+    extract_to.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(extract_to)
+    print(f"✓ Extraído: {zip_path.name}")
+
+
+def download_dataset() -> Path:
+    """Baixa dataset público pequeno."""
+    datasets_dir = DATASETS_DIR / "sample"
+    datasets_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = datasets_dir / "coco128.zip"
+
+    if not zip_path.exists():
+        print("📥 Baixando dataset COCO128 (pequeno, para teste rápido)...")
+        print("   Fonte: https://github.com/ultralytics/yolov5")
+        download_file(DATASET_URL, zip_path)
+
+    extract_dir = datasets_dir / "coco128"
+    if not (extract_dir / "images" / "train").exists():
+        print("📦 Extraindo...")
+        extract_zip(zip_path, datasets_dir)
+
+    return extract_dir
+
+
+def create_data_yaml(output_path: Path, train_dir: str | Path, val_dir: str | Path) -> Path:
+    """Cria arquivo data.yaml."""
+    import yaml
 
     data = {
         "train": str(Path(train_dir).resolve()),
         "val": str(Path(val_dir).resolve()),
-        "nc": nc,
-        "names": names,
+        "nc": len(TRAFFIC_CLASSES),
+        "names": TRAFFIC_CLASSES,
     }
 
-    if test_dir is not None:
-        data["test"] = str(Path(test_dir).resolve())
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False)
 
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        "\n".join(f"{k}: {v}" if not isinstance(v, list) else f"{k}: {v}"
-                  for k, v in data.items()),
-        encoding="utf-8",
-    )
-    return out
+    print(f"✓ data.yaml criado: {output_path}")
+    return output_path
 
 
-def train(
+def train_model(
     data: str | Path,
-    model: str | Path = "yolo11m.pt",
-    epochs: int = 100,
+    model: str = "yolo11m.pt",
+    epochs: int = 50,
     imgsz: int = 640,
     batch: int = 16,
     device: str = "0",
-    project: str | Path = "runs/detect",
-    name: str = "train",
-    pretrained: bool = True,
-    resume: Optional[str | Path] = None,
 ) -> None:
-    """Treina um modelo YOLO com Ultralytics.
+    """Treina o modelo YOLO11m."""
+    print("=" * 60)
+    print("🚀 TREINAMENTO YOLO11m PARA VEÍCULOS")
+    print("=" * 60)
+    print(f"  Modelo: {model}")
+    print(f"  Dataset: {data}")
+    print(f"  Épocas: {epochs}")
+    print(f"  Imgsz: {imgsz}")
+    print(f"  Batch: {batch}")
+    print(f"  Device: {device}")
+    print("=" * 60)
 
-    Parameters
-    ----------
-    data : str | Path
-        Caminho para arquivo data.yaml.
-    model : str | Path
-        Caminho para pesos pré-treinados (.pt) ou nome do modelo Ultralytics.
-    epochs : int
-        Número de épocas.
-    imgsz : int
-        Tamanho da imagem de entrada.
-    batch : int
-        Tamanho do lote.
-    device : str
-        Dispositivo (ex: "0" para GPU 0, "cpu" para CPU).
-    project : str | Path
-        Diretório do projeto para salvar resultados.
-    name : str
-        Nome da execução.
-    pretrained : bool
-        Se True, carrega pesos pré-treinados.
-    resume : str | Path, optional
-        Caminho para checkpoint para retomar treino.
-    """
-    print(f"[train] Iniciando treinamento com modelo: {model}")
-    print(f"[train] Dados: {data}")
-    print(f"[train] Épocas: {epochs}, ImgSz: {imgsz}, Batch: {batch}, Device: {device}")
-
-    yolo = YOLO(model)  # carrega modelo pré-treinado ou checkpoint
+    yolo = YOLO(model)
 
     yolo.train(
         data=str(data),
@@ -147,99 +130,59 @@ def train(
         imgsz=imgsz,
         batch=batch,
         device=device,
-        project=str(project),
-        name=name,
-        pretrained=pretrained,
-        resume=str(resume) if resume else None,
+        project=str(RUNS_DIR / "detect"),
+        name="traffic_yolo11m",
+        pretrained=True,
+        verbose=True,
     )
 
-    print(f"[train] Treinamento concluído. Resultados em: {project}/{name}")
+    print("=" * 60)
+    print("✅ TREINAMENTO CONCLUÍDO!")
+    print(f"   Melhor modelo: runs/detect/traffic_yolo11m/weights/best.pt")
+    print("=" * 60)
 
 
-def val(
-    data: str | Path,
-    model: str | Path,
-    imgsz: int = 640,
-    batch: int = 16,
-    device: str = "0",
-    project: str | Path = "runs/detect",
-    name: str = "val",
-) -> None:
-    """Valida um modelo YOLO treinado.
-
-    Parameters
-    ----------
-    data : str | Path
-        Caminho para arquivo data.yaml.
-    model : str | Path
-        Caminho para pesos treinados (.pt).
-    imgsz : int
-        Tamanho da imagem.
-    batch : int
-        Tamanho do lote.
-    device : str
-        Dispositivo.
-    project : str | Path
-        Diretório do projeto.
-    name : str
-        Nome da execução.
-    """
-    print(f"[val] Validando modelo: {model}")
-    print(f"[val] Dados: {data}")
-
+def validate_model(data: str | Path, model: str, imgsz: int = 640, device: str = "0") -> None:
+    """Valida modelo treinado."""
+    print("🔍 Validando modelo...")
     yolo = YOLO(model)
-    metrics = yolo.val(
-        data=str(data),
-        imgsz=imgsz,
-        batch=batch,
-        device=device,
-        project=str(project),
-        name=name,
-    )
+    metrics = yolo.val(data=str(data), imgsz=imgsz, batch=16, device=device)
 
-    print(f"[val] Validação concluída. Resultados em: {project}/{name}")
-    print(f"[val] mAP50: {metrics.box.map50:.4f}")
-    print(f"[val] mAP50-95: {metrics.box.map:.4f}")
-    print(f"[val] Precision: {metrics.box.mp:.4f}")
-    print(f"[val] Recall: {metrics.box.mr:.4f}")
+    print("\n📊 RESULTADOS:")
+    print(f"   mAP50: {metrics.box.map50:.4f}")
+    print(f"   mAP50-95: {metrics.box.map:.4f}")
+    print(f"   Precisão: {metrics.box.mp:.4f}")
+    print(f"   Recall: {metrics.box.mr:.4f}")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="Treinamento e validação de modelos YOLO para análise de tráfego."
-    )
+    p = argparse.ArgumentParser(description="Treinador Simples YOLO11m")
     sub = p.add_subparsers(dest="command", required=True)
 
+    # download
+    p_dl = sub.add_parser("download", help="Baixar dataset COCO128")
+
     # train
-    p_train = sub.add_parser("train", help="Treinar modelo YOLO")
-    p_train.add_argument("--data", required=True, help="Caminho para data.yaml")
-    p_train.add_argument("--model", default="yolo11m.pt", help="Modelo base (.pt ou nome Ultralytics)")
-    p_train.add_argument("--epochs", type=int, default=100, help="Número de épocas")
-    p_train.add_argument("--imgsz", type=int, default=640, help="Tamanho da imagem")
-    p_train.add_argument("--batch", type=int, default=16, help="Tamanho do lote")
-    p_train.add_argument("--device", default="0", help="Dispositivo (0 para GPU, cpu para CPU)")
-    p_train.add_argument("--project", default="runs/detect", help="Diretório do projeto")
-    p_train.add_argument("--name", default="train", help="Nome da execução")
-    p_train.add_argument("--resume", default=None, help="Checkpoint para retomar treino")
+    p_train = sub.add_parser("train", help="Treinar modelo")
+    p_train.add_argument("--data", required=True, help="Caminho data.yaml")
+    p_train.add_argument("--model", default="yolo11m.pt", help="Modelo base")
+    p_train.add_argument("--epochs", type=int, default=50, help="Épocas")
+    p_train.add_argument("--imgsz", type=int, default=640, help="Tamanho imagem")
+    p_train.add_argument("--batch", type=int, default=16, help="Batch size")
+    p_train.add_argument("--device", default="0", help="Dispositivo")
 
     # val
-    p_val = sub.add_parser("val", help="Validar modelo YOLO")
-    p_val.add_argument("--data", required=True, help="Caminho para data.yaml")
-    p_val.add_argument("--model", required=True, help="Caminho para pesos treinados (.pt)")
-    p_val.add_argument("--imgsz", type=int, default=640, help="Tamanho da imagem")
-    p_val.add_argument("--batch", type=int, default=16, help="Tamanho do lote")
-    p_val.add_argument("--device", default="0", help="Dispositivo (0 para GPU, cpu para CPU)")
-    p_val.add_argument("--project", default="runs/detect", help="Diretório do projeto")
-    p_val.add_argument("--name", default="val", help="Nome da execução")
+    p_val = sub.add_parser("val", help="Validar modelo")
+    p_val.add_argument("--data", required=True, help="Caminho data.yaml")
+    p_val.add_argument("--model", required=True, help="Caminho modelo treinado (.pt)")
+    p_val.add_argument("--imgsz", type=int, default=640, help="Tamanho imagem")
+    p_val.add_argument("--device", default="0", help="Dispositivo")
 
-    # create-data-yaml
-    p_data = sub.add_parser("create-data-yaml", help="Gerar arquivo data.yaml")
-    p_data.add_argument("--output", required=True, help="Caminho de saída do data.yaml")
-    p_data.add_argument("--train", required=True, help="Diretório de treino")
-    p_data.add_argument("--val", required=True, help="Diretório de validação")
-    p_data.add_argument("--test", default=None, help="Diretório de teste (opcional)")
-    p_data.add_argument("--nc", type=int, default=6, help="Número de classes")
-    p_data.add_argument("--names", default=None, help="Nomes das classes (JSON ou lista separada por vírgula)")
+    # create-data
+    p_data = sub.add_parser("create-data", help="Criar data.yaml")
+    p_data.add_argument("--output", required=True, help="Caminho saída")
+    p_data.add_argument("--train", required=True, help="Diretório treino")
+    p_data.add_argument("--val", required=True, help="Diretório validação")
 
     return p
 
@@ -247,50 +190,30 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
 
-    if args.command == "train":
-        train(
+    if args.command == "download":
+        download_dataset()
+    elif args.command == "train":
+        train_model(
             data=args.data,
             model=args.model,
             epochs=args.epochs,
             imgsz=args.imgsz,
             batch=args.batch,
             device=args.device,
-            project=args.project,
-            name=args.name,
-            resume=args.resume,
         )
     elif args.command == "val":
-        val(
+        validate_model(
             data=args.data,
             model=args.model,
             imgsz=args.imgsz,
-            batch=args.batch,
             device=args.device,
-            project=args.project,
-            name=args.name,
         )
-    elif args.command == "create-data-yaml":
-        names: Optional[list[str]] = None
-        if args.names is not None:
-            try:
-                names = json.loads(args.names)
-                if not isinstance(names, list):
-                    raise ValueError
-            except (json.JSONDecodeError, ValueError):
-                names = [n.strip() for n in args.names.split(",") if n.strip()]
-
-        build_data_yaml(
-            output_path=args.output,
+    elif args.command == "create-data":
+        create_data_yaml(
+            output_path=Path(args.output),
             train_dir=args.train,
             val_dir=args.val,
-            test_dir=args.test,
-            nc=args.nc,
-            names=names,
         )
-        print(f"[create-data-yaml] Arquivo gerado: {args.output}")
-    else:
-        print(f"Comando desconhecido: {args.command}")
-        return 1
 
     return 0
 
