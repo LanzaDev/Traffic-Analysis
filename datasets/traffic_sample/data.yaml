@@ -1,0 +1,21 @@
+# Rastreamento e Análise de Tráfego - Dataset de Treinamento
+# Dataset sintético para teste rápido (30 imagens treino, 10 validação)
+
+train: ../datasets/traffic_sample/images/train
+val: ../datasets/traffic_sample/images/val
+
+# Número de classes
+nc: 6
+
+# Nomes das classes (ordem deve coincidir com as anotações)
+names:
+  0: person
+  1: car
+  2: motorcycle
+  3: bus
+  4: truck
+  5: articulated_truck
+
+# Informações adicionais
+# Cada imagem tem entre 1-4 veículos aleatórios
+# Formato YOLO: class_id x_center y_center width height (valores normalizados 0-1)
